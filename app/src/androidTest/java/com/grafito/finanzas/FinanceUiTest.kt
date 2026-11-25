@@ -145,7 +145,7 @@ class FinanceUiTest {
         compose.onNodeWithText("Categoría").performClick()
         compose.onNodeWithText("Registrar · Ingreso").assertIsDisplayed()
         compose.onNodeWithText("Sin categoría").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Volver a Registrar").performClick()
+        compose.onNodeWithContentDescription("Volver al formulario").performClick()
         compose.onNodeWithContentDescription("Monto").assertTextContains("12.50")
         compose.onNodeWithText("Categoría").performClick()
         compose.onNodeWithContentDescription("Buscar categoría").performTextInput("VÉNT")

@@ -246,9 +246,9 @@ class YapePilotTest {
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Revisar ingreso de Yape").fetchSemanticsNodes().isNotEmpty() }
         assertSaveButtonUsesFrancaBlue("Guardar ingreso")
         compose.onNodeWithText("Yape").assertIsSelected()
-        compose.onNodeWithText("Más…").performScrollTo().performClick()
+        compose.onNodeWithText("Categoría").performScrollTo().performClick()
         compose.onNodeWithText("Transporte").assertDoesNotExist()
-        compose.onNodeWithText("Buscar categoría").performTextInput("venta")
+        compose.onNodeWithContentDescription("Buscar categoría").performTextInput("venta")
         compose.onNode(hasText("Ventas") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton))
             .performScrollTo().performClick()
         compose.onNodeWithText("Guardar ingreso").performClick()

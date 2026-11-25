@@ -70,9 +70,11 @@ class BcpReceiptTest {
             } finally {
                 screenshot.recycle()
             }
-            compose.onNodeWithText("Sin categoría").performScrollTo().performClick()
-            compose.onNodeWithText("Buscar categoría").performScrollTo().performTextInput("alimentacion")
-            compose.onNodeWithText("Alimentación").performScrollTo().performClick()
+            compose.onNodeWithText("Categoría").performScrollTo().performClick()
+            compose.onNodeWithText("BCP · Gasto").assertIsDisplayed()
+            compose.onNodeWithContentDescription("Buscar categoría").performTextInput("alimentacion")
+            compose.onNodeWithText("Alimentación").performClick()
+            compose.onNode(hasText("Categoría") and hasText("Alimentación")).assertIsDisplayed()
             compose.onNodeWithText("Guardar gasto").performScrollTo().performClick()
             val saved = awaitSaved()
             assertEquals(1250L, saved.amountCents)

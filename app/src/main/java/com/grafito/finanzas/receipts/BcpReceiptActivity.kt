@@ -20,6 +20,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
@@ -35,11 +37,12 @@ import com.grafito.finanzas.data.FinanceDatabase
 import com.grafito.finanzas.data.FinanceRepository
 import com.grafito.finanzas.data.ReceiptSaveResult
 import com.grafito.finanzas.model.Money
-import com.grafito.finanzas.ui.components.CategorySelector
 import com.grafito.finanzas.ui.components.FrancaCue
 import com.grafito.finanzas.ui.components.LocalFrancaSounds
 import com.grafito.finanzas.ui.components.ProvideFrancaSounds
 import com.grafito.finanzas.ui.components.ScreenTitle
+import com.grafito.finanzas.ui.screens.RegisterCategoryField
+import com.grafito.finanzas.ui.screens.RegisterCategorySheet
 import com.grafito.finanzas.ui.theme.GrafitoTheme
 import com.grafito.finanzas.ui.theme.HomePalette
 import kotlinx.coroutines.CancellationException
@@ -215,7 +218,12 @@ private fun ReceiptForm(review: ReceiptReview.Ready, accounts: List<AccountEntit
     var toId by rememberSaveable { mutableStateOf<Long?>(null) }
     var transfer by rememberSaveable { mutableStateOf(false) }
     var categoryId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var showCategories by rememberSaveable(review.receipt.fingerprint) { mutableStateOf(false) }
     var accountPrefilled by rememberSaveable { mutableStateOf(false) }
+    val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val expenseCategories = remember(categories) { categories.filter { it.type == EntryType.EXPENSE } }
+    val selectedCategory = expenseCategories.find { it.id == categoryId }
     LaunchedEffect(accounts) {
         if (!accountPrefilled && accounts.isNotEmpty()) {
             fromId = accounts.singleOrNull { Regex("\\bbcp\\b", RegexOption.IGNORE_CASE).containsMatchIn(it.name) }?.id
@@ -254,8 +262,11 @@ private fun ReceiptForm(review: ReceiptReview.Ready, accounts: List<AccountEntit
             ReceiptAccountMenu("Cuenta de origen", from, accounts, !review.saving) { fromId = it.id }
             if (transfer) ReceiptAccountMenu("Cuenta de destino", to, accounts.filter { it.id != fromId }, !review.saving) { toId = it.id }
             if (review.mail != null && !transfer) {
-                CategorySelector(categories.filter { it.type == EntryType.EXPENSE }, categoryId,
-                    onSelect = { categoryId = it }, enabled = !review.saving)
+                RegisterCategoryField(selectedCategory, enabled = !review.saving) {
+                    focus.clearFocus()
+                    keyboard?.hide()
+                    showCategories = true
+                }
             }
             OutlinedTextField(value = note, onValueChange = { note = it.take(160) }, modifier = Modifier.fillMaxWidth(),
                 label = { Text("Concepto (opcional)") }, singleLine = true, enabled = !review.saving)
@@ -264,7 +275,7 @@ private fun ReceiptForm(review: ReceiptReview.Ready, accounts: List<AccountEntit
     review.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
     Button(onClick = {
         if (cents != null && from != null) onSave(cents, from.id, if (transfer) to?.id else null, note,
-            if (transfer) null else categoryId)
+            if (transfer) null else selectedCategory?.id)
     }, enabled = !review.saving && cents != null && from != null && (!transfer || to != null),
         modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = MaterialTheme.shapes.medium) {
         Text(if (review.saving) "Guardando…" else if (transfer) "Guardar transferencia" else "Guardar gasto")
@@ -281,6 +292,13 @@ private fun ReceiptForm(review: ReceiptReview.Ready, accounts: List<AccountEntit
                 colors = ButtonDefaults.textButtonColors(contentColor = HomePalette.Expense)
             ) { Text("Descartar aviso") }
         }
+    }
+    if (showCategories && review.mail != null && !transfer) {
+        RegisterCategorySheet(
+            expenseCategories, selectedCategory?.id, registrationContext = "BCP · Gasto",
+            onSelect = { categoryId = it; showCategories = false },
+            onDismiss = { showCategories = false }
+        )
     }
 }
 
