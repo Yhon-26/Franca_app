@@ -21,6 +21,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.grafito.finanzas.data.*
 import com.grafito.finanzas.model.FinanceMath
 import com.grafito.finanzas.model.Money
+import com.grafito.finanzas.ui.screens.reportMonthLabel
 import com.grafito.finanzas.ui.theme.HomePalette
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -29,8 +30,12 @@ import org.junit.Assert.*
 import org.junit.rules.ExternalResource
 import org.junit.rules.RuleChain
 import java.io.File
+import java.text.NumberFormat
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
+import java.time.format.TextStyle
+import java.util.Locale
 
 /** Runs only in the separate .validation application; never clears the user's debug installation. */
 class FinanceUiTest {
@@ -320,6 +325,7 @@ class FinanceUiTest {
     @Test fun reportDeskScenePlaysAndPausesInBackground() {
         compose.onNodeWithContentDescription("Reportes").performClick()
         val bounds = assertDeskSceneAdvances()
+        compose.onNodeWithText("Sin gastos en este mes").assertIsDisplayed()
         compose.activityRule.scenario.moveToState(Lifecycle.State.STARTED)
         compose.waitForIdle()
         // Wait for the display to present the last frame that was queued before the pause.
@@ -330,6 +336,82 @@ class FinanceUiTest {
 
         compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
         compose.waitUntil(10_000) { !pausedAt.contentEquals(deskPixels(bounds)) }
+    }
+
+    @Test fun reportsSelectMonthAndShowOnlyExpensesInTheSelectedCategory() {
+        val zone = ZoneId.systemDefault()
+        val current = YearMonth.now(zone)
+        val previous = current.minusMonths(1)
+        val thisMonth = current.atDay(1).atTime(10, 30).atZone(zone).toInstant().toEpochMilli()
+        val lastMonth = previous.atDay(1).atTime(10, 30).atZone(zone).toInstant().toEpochMilli()
+        runBlocking {
+            val original = repository.snapshot()
+            repository.restore(original.copy(transactions = listOf(
+                TransactionEntity(1, EntryType.EXPENSE, 1250, 1, categoryId = 1, note = "Pasaje en bus", occurredAt = thisMonth),
+                TransactionEntity(2, EntryType.EXPENSE, 3750, 1, categoryId = 1, note = "Movilidad al trabajo", occurredAt = thisMonth),
+                TransactionEntity(3, EntryType.EXPENSE, 3000, 1, note = "Panadería", occurredAt = thisMonth),
+                TransactionEntity(4, EntryType.INCOME, 100000, 2, categoryId = 2, note = "Venta del mes", occurredAt = thisMonth),
+                TransactionEntity(5, EntryType.TRANSFER, 50000, 2, toAccountId = 1, occurredAt = thisMonth),
+                TransactionEntity(6, EntryType.EXPENSE, 9000, 1, categoryId = 1, note = "Taxi del mes pasado", occurredAt = lastMonth),
+                TransactionEntity(7, EntryType.INCOME, 20000, 2, categoryId = 2, occurredAt = lastMonth)
+            )))
+        }
+        compose.onNodeWithContentDescription("Reportes").performClick()
+        val balance = compose.onNodeWithText(Money.format(92000))
+        compose.waitUntil(10_000) { balance.isDisplayed() }
+        compose.onNodeWithText(reportMonthLabel(current)).assertIsDisplayed()
+        compose.onNodeWithText(Money.format(100000)).assertIsDisplayed()
+        compose.onNodeWithText(Money.format(8000)).assertIsDisplayed()
+        val percent = NumberFormat.getPercentInstance(Locale.forLanguageTag("es-PE")).apply { maximumFractionDigits = 1 }
+        compose.onNodeWithText(percent.format(0.625)).assertIsDisplayed()
+        compose.onNodeWithText(percent.format(0.375)).assertIsDisplayed()
+        val screenshot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        try {
+            File(compose.activity.getExternalFilesDir(null), "franca-reportes.png").outputStream().use {
+                screenshot.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+        } finally {
+            screenshot.recycle()
+        }
+
+        compose.onNodeWithText("Transporte").performScrollTo().performClick()
+        val pasaje = compose.onNodeWithText("Pasaje en bus")
+        compose.waitUntil(10_000) { pasaje.isDisplayed() }
+        compose.onNodeWithText("Movilidad al trabajo").assertIsDisplayed()
+        compose.onNodeWithText("Panadería").assertDoesNotExist()
+        compose.onNodeWithText("Taxi del mes pasado").assertDoesNotExist()
+        compose.onNodeWithText("Transferencia").assertDoesNotExist()
+        compose.activityRule.scenario.recreate()
+        compose.onNodeWithText("Transporte · ${reportMonthLabel(current)}").assertIsDisplayed()
+        compose.waitUntil(10_000) { pasaje.isDisplayed() }
+        val drillDown = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        try {
+            File(compose.activity.getExternalFilesDir(null), "franca-reportes-movimientos.png").outputStream().use {
+                drillDown.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+        } finally {
+            drillDown.recycle()
+        }
+        compose.onNodeWithContentDescription("Volver a Reportes").performClick()
+        compose.onNodeWithContentDescription("Mes anterior").performClick()
+        compose.onNodeWithText(reportMonthLabel(previous)).assertIsDisplayed()
+        val previousBalance = compose.onNodeWithText(Money.format(11000))
+        compose.waitUntil(10_000) { previousBalance.isDisplayed() }
+        compose.onNodeWithText("Transporte").performScrollTo().performClick()
+        val taxi = compose.onNodeWithText("Taxi del mes pasado")
+        compose.waitUntil(10_000) { taxi.isDisplayed() }
+        pasaje.assertDoesNotExist()
+        compose.onNodeWithContentDescription("Volver a Reportes").performClick()
+
+        compose.onNodeWithText(reportMonthLabel(previous)).performClick()
+        compose.onNodeWithText("Elegir mes").assertIsDisplayed()
+        if (previous.year != current.year) compose.onNodeWithContentDescription("Año siguiente").performClick()
+        val currentName = current.month.getDisplayName(TextStyle.FULL, Locale.forLanguageTag("es-PE"))
+        compose.onNodeWithContentDescription("$currentName ${current.year}").performClick()
+        compose.waitUntil(10_000) { balance.isDisplayed() }
+        compose.onNodeWithText("Sin categoría").performScrollTo().performClick()
+        compose.waitUntil(10_000) { compose.onNodeWithText("Panadería").isDisplayed() }
+        pasaje.assertDoesNotExist()
     }
 
     @Test fun historyOpensFromHomeAndFindsMovementsByAmountAccountAndCategory() {
@@ -401,7 +483,7 @@ class FinanceUiTest {
 
     private fun assertDeskSceneAdvances(): Rect {
         val scene = compose.onNodeWithContentDescription("Capibara de Franca trabajando frente a su laptop")
-        scene.assertIsDisplayed()
+        compose.waitUntil(10_000) { scene.isDisplayed() }
         val bounds = scene.fetchSemanticsNode().boundsInWindow
         compose.waitUntil(5_000) {
             deskPixels(bounds).any { pixel ->

@@ -7,6 +7,9 @@ import java.time.YearMonth
 import java.time.ZoneId
 
 internal data class MonthlyTotals(val income: Long, val expenses: Long)
+internal data class MonthlyReport(val totals: MonthlyTotals, val expensesByCategory: List<CategorySpending>)
+internal data class CategorySpending(val categoryId: Long?, val cents: Long)
+internal data class ReportExpenseSelection(val month: YearMonth, val categoryId: Long?)
 
 object FinanceMath {
     fun accountBalances(accounts: List<AccountEntity>, entries: List<TransactionEntity>): Map<Long, Long> {
@@ -46,4 +49,20 @@ object FinanceMath {
         }
         return MonthlyTotals(income, expenses)
     }
+
+    internal fun monthlyReport(entries: List<TransactionEntity>, month: LongRange): MonthlyReport {
+        val spending = entries.asSequence()
+            .filter { it.isExpenseIn(month) }
+            .groupingBy { it.categoryId }
+            .fold(0L) { sum, entry -> sum + entry.amountCents }
+            .map { (id, cents) -> CategorySpending(id, cents) }
+            .sortedByDescending { it.cents }
+        return MonthlyReport(monthlyTotals(entries, month), spending)
+    }
+
+    internal fun reportExpenses(entries: List<TransactionEntity>, month: LongRange, categoryId: Long?): List<TransactionEntity> =
+        entries.filter { it.isExpenseIn(month) && it.categoryId == categoryId }
+
+    private fun TransactionEntity.isExpenseIn(month: LongRange): Boolean =
+        type == EntryType.EXPENSE && occurredAt in month
 }

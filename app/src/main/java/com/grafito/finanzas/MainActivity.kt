@@ -29,7 +29,6 @@ import com.grafito.finanzas.model.*
 import com.grafito.finanzas.notifications.YapeNotificationListener
 import com.grafito.finanzas.notifications.YapeListenerRecovery
 import com.grafito.finanzas.ui.screens.*
-import com.grafito.finanzas.ui.components.DeskMascotScene
 import com.grafito.finanzas.ui.components.FloatingNavigationBar
 import com.grafito.finanzas.ui.components.FrancaCue
 import com.grafito.finanzas.ui.components.NavigationDestination
@@ -40,7 +39,6 @@ import com.grafito.finanzas.ui.components.LocalFrancaSounds
 import com.grafito.finanzas.ui.components.ProvideFrancaSounds
 import com.grafito.finanzas.ui.components.TransferDetailDialog
 import com.grafito.finanzas.ui.components.movementSavedMessage
-import com.grafito.finanzas.ui.components.rememberDeskMascotScene
 import com.grafito.finanzas.ui.theme.GrafitoTheme
 import com.grafito.finanzas.ui.theme.HomePalette
 import kotlinx.coroutines.launch
@@ -50,11 +48,11 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.catch
 import androidx.lifecycle.lifecycleScope
 
-private enum class Tab(val label: String, val development: DevelopmentSection? = null) {
+private enum class Tab(val label: String) {
     HOME("Inicio"),
     HISTORY("Historial"),
     ACCOUNTS("Cuentas"),
-    REPORTS("Reportes", DevelopmentSection.REPORTS),
+    REPORTS("Reportes"),
     SETTINGS("Ajustes")
 }
 
@@ -75,9 +73,8 @@ class MainActivity : ComponentActivity() {
             ProvideFrancaSounds {
                 GrafitoTheme {
                     val vm: FinanceViewModel = viewModel()
-                    val deskScene = rememberDeskMascotScene()
                     var splashFinished by rememberSaveable { mutableStateOf(false) }
-                    if (splashFinished) MainApp(vm, window, deskScene) else FrancaSplash { splashFinished = true }
+                    if (splashFinished) MainApp(vm, window) else FrancaSplash { splashFinished = true }
                 }
             }
         }
@@ -85,7 +82,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun MainApp(vm: FinanceViewModel, window: Window, deskScene: DeskMascotScene?) {
+private fun MainApp(vm: FinanceViewModel, window: Window) {
     val data by vm.state.collectAsStateWithLifecycle()
     val openQuickOnLaunch by vm.openQuickOnLaunch.collectAsStateWithLifecycle()
     val loadError by vm.loadError.collectAsStateWithLifecycle()
@@ -198,10 +195,7 @@ private fun MainApp(vm: FinanceViewModel, window: Window, deskScene: DeskMascotS
         }
     }
 
-    val pageColors = when (currentTab) {
-        Tab.HOME, Tab.REPORTS -> HomePalette.scheme
-        Tab.HISTORY, Tab.ACCOUNTS, Tab.SETTINGS -> HomePalette.panelScheme
-    }
+    val pageColors = if (isHome) HomePalette.scheme else HomePalette.panelScheme
     MaterialTheme(colorScheme = HomePalette.scheme) {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
             Scaffold(
@@ -221,9 +215,7 @@ private fun MainApp(vm: FinanceViewModel, window: Window, deskScene: DeskMascotS
                     MaterialTheme(colorScheme = pageColors) {
                         Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding), contentAlignment = Alignment.TopCenter) {
                             val page = Modifier.widthIn(max = 620.dp)
-                            val development = currentTab.development
                             when {
-                                development != null -> DevelopmentScreen(development, deskScene, page)
                                 loadError -> Column(page.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center,
                                     horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text("No se pudieron cargar tus datos.")
@@ -274,7 +266,8 @@ private fun MainApp(vm: FinanceViewModel, window: Window, deskScene: DeskMascotS
                                             }
                                         }
                                     )
-                                    Tab.REPORTS -> ReportsScreen(data, page, onQuickAdd = { openCreate() })
+                                    Tab.REPORTS -> ReportsScreen(data, page, highlightedEntryId = highlightedEntryId,
+                                        onSelect = { openEdit(it) }, onQuickAdd = { openCreate() })
                                     Tab.SETTINGS -> SettingsScreen(
                                         data = data,
                                         openQuickOnLaunch = openQuickOnLaunch ?: true,

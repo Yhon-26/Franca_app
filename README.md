@@ -53,7 +53,7 @@ Usa `fix/` para correcciones, `feature/` para funciones y `redesign/` para cambi
 - **Registro híbrido:** atajos que abren un gasto prellenado para confirmarlo, sugerencia de categoría según importes repetidos en el historial y revisión de movimientos detectados por avisos de Yape o correos de BCP.
 - **Cuentas:** crear cuentas manuales con saldos iniciales, consultar balance por cuenta, transferir sin duplicar el gasto, eliminar solo cuentas sin movimientos.
 - **Movimientos:** Historial y «Ver todos» desde Inicio abren la lista agrupada por día. Busca por importe en soles, cuenta, categoría o concepto, y filtra por gasto, ingreso o transferencia.
-- **Reportes:** la pestaña muestra «En desarrollo». Inicio incluye ingresos y gastos del mes.
+- **Reportes:** elige el mes para consultar ingresos, gastos y balance. Toca una categoría de gasto para ver los movimientos de ese periodo.
 - **Persistencia:** Room + SQLite; todas las cantidades monetarias se guardan en **centavos enteros**.
 - **Preferencias:** DataStore para modo de apertura.
 - **Cuenta predeterminada:** selección desde Ajustes para nuevos gastos e ingresos; cada atajo puede usar su propia cuenta y la muestra en Inicio.
