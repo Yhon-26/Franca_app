@@ -52,7 +52,7 @@ import androidx.lifecycle.lifecycleScope
 
 private enum class Tab(val label: String, val development: DevelopmentSection? = null) {
     HOME("Inicio"),
-    HISTORY("Historial", DevelopmentSection.HISTORY),
+    HISTORY("Historial"),
     ACCOUNTS("Cuentas"),
     REPORTS("Reportes", DevelopmentSection.REPORTS),
     SETTINGS("Ajustes")
@@ -199,8 +199,8 @@ private fun MainApp(vm: FinanceViewModel, window: Window, deskScene: DeskMascotS
     }
 
     val pageColors = when (currentTab) {
-        Tab.HOME, Tab.HISTORY, Tab.REPORTS -> HomePalette.scheme
-        Tab.ACCOUNTS, Tab.SETTINGS -> HomePalette.panelScheme
+        Tab.HOME, Tab.REPORTS -> HomePalette.scheme
+        Tab.HISTORY, Tab.ACCOUNTS, Tab.SETTINGS -> HomePalette.panelScheme
     }
     MaterialTheme(colorScheme = HomePalette.scheme) {
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
@@ -242,12 +242,13 @@ private fun MainApp(vm: FinanceViewModel, window: Window, deskScene: DeskMascotS
                                             modifier = page,
                                             onReviewYape = { playSound(FrancaCue.TAP); yapeReviewId = it },
                                             onNewFavorite = { openCreate(asShortcut = true) },
-                                            onSeeAll = if (Tab.HISTORY.development == null) { { currentTab = Tab.HISTORY } } else null,
+                                            onSeeAll = { currentTab = Tab.HISTORY },
                                             onSelect = { openEdit(it) },
                                             onFavorite = { openCreate(fromShortcut = it) }
                                         )
                                     }
-                                    Tab.HISTORY -> HistoryScreen(data, page, onSelect = { openEdit(it) }, onQuickAdd = { openCreate() })
+                                    Tab.HISTORY -> HistoryScreen(data, page, highlightedEntryId = highlightedEntryId,
+                                        onSelect = { openEdit(it) }, onQuickAdd = { openCreate() })
                                     Tab.ACCOUNTS -> AccountsScreen(
                                         data = data,
                                         modifier = page,

@@ -16,7 +16,6 @@ import com.grafito.finanzas.ui.components.DeskMascotScene
 import com.grafito.finanzas.ui.components.ScreenTitle
 
 internal enum class DevelopmentSection(val title: String, val hint: String) {
-    HISTORY("Movimientos", "Puedes revisar tus últimos movimientos en Inicio."),
     REPORTS("Reportes", "Puedes consultar tus ingresos y gastos del mes en Inicio.")
 }
 

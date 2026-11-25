@@ -1,87 +1,216 @@
 package com.grafito.finanzas.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import com.grafito.finanzas.data.*
-import com.grafito.finanzas.model.*
-import com.grafito.finanzas.ui.components.*
-import com.grafito.finanzas.ui.theme.Graphite
+import com.grafito.finanzas.data.EntryType
+import com.grafito.finanzas.data.TransactionEntity
+import com.grafito.finanzas.model.FinanceState
+import com.grafito.finanzas.model.filterMovements
+import com.grafito.finanzas.ui.components.MovementRow
+import com.grafito.finanzas.ui.components.ScreenTitle
+import com.grafito.finanzas.ui.theme.HomePalette
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-private val dayLabel = DateTimeFormatter.ofPattern("d 'de' MMMM 'de' yyyy", Locale.forLanguageTag("es-PE"))
+private val historyLocale = Locale.forLanguageTag("es-PE")
+private val shortDate = DateTimeFormatter.ofPattern("d MMM", historyLocale)
+private val dateWithYear = DateTimeFormatter.ofPattern("d MMM yyyy", historyLocale)
+private val movementTime = DateTimeFormatter.ofPattern("HH:mm", historyLocale)
+private val movementFilters = listOf(
+    null to "Todos",
+    EntryType.EXPENSE to "Gastos",
+    EntryType.INCOME to "Ingresos",
+    EntryType.TRANSFER to "Transferencias"
+)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun HistoryScreen(data: FinanceState, modifier: Modifier = Modifier, onSelect: (TransactionEntity) -> Unit, onQuickAdd: () -> Unit) {
-    var search by rememberSaveable { mutableStateOf("") }
-    var filter by rememberSaveable { mutableStateOf("TODOS") }
-    val filtered = remember(search, filter, data.transactions, data.categories) {
-        data.transactions.filter { entry ->
-            val category = data.categories.find { it.id == entry.categoryId }?.name.orEmpty()
-            (filter == "TODOS" || entry.type == filter) &&
-                (search.isBlank() || (entry.note + category + Money.format(entry.amountCents)).contains(search, ignoreCase = true))
-        }
-    }
+internal fun HistoryScreen(
+    data: FinanceState,
+    modifier: Modifier = Modifier,
+    highlightedEntryId: Long? = null,
+    onSelect: (TransactionEntity) -> Unit,
+    onQuickAdd: () -> Unit
+) {
+    var query by rememberSaveable { mutableStateOf("") }
+    var type by rememberSaveable { mutableStateOf<String?>(null) }
+    val focus = LocalFocusManager.current
+    val accounts = remember(data.accounts) { data.accounts.associateBy { it.id } }
+    val categories = remember(data.categories) { data.categories.associateBy { it.id } }
     val zone = ZoneId.systemDefault()
-    val byDay = remember(filtered, zone) { filtered.groupBy { Instant.ofEpochMilli(it.occurredAt).atZone(zone).toLocalDate() } }
-    Column(modifier.fillMaxSize().padding(horizontal = 20.dp).padding(top = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ScreenTitle("Movimientos", onQuickAdd)
-        OutlinedTextField(
-            value = search,
-            onValueChange = { search = it },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Buscar movimiento") },
-            placeholder = { Text("Importe o concepto") },
-            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-            singleLine = true,
-            shape = MaterialTheme.shapes.medium
-        )
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            listOf("TODOS" to "Todos", EntryType.EXPENSE to "Gastos", EntryType.INCOME to "Ingresos", EntryType.TRANSFER to "Transferencias").forEach { (type, title) ->
-                FilterChip(selected = filter == type, onClick = { filter = type }, label = { Text(title) })
+    val today = LocalDate.now(zone)
+    val hasMovements = data.transactions.isNotEmpty()
+    val grouped = key(data.transactions, accounts, categories, zone) {
+        produceState<Map<LocalDate, List<TransactionEntity>>?>(null, query, type) {
+            value = withContext(Dispatchers.Default) {
+                filterMovements(data.transactions, accounts, categories, query, type).groupBy { entry ->
+                    Instant.ofEpochMilli(entry.occurredAt).atZone(zone).toLocalDate()
+                }
             }
         }
-        if (filtered.isNotEmpty()) {
-            Text("${filtered.size} ${if (filtered.size == 1) "movimiento" else "movimientos"}",
-                color = Graphite.Muted, style = MaterialTheme.typography.labelMedium)
-        }
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 20.dp)) {
-            if (filtered.isEmpty()) {
-                item {
-                    if (data.transactions.isEmpty()) {
-                        EmptyState(Icons.AutoMirrored.Outlined.ReceiptLong, "Tu historial está vacío", "Registra un ingreso o gasto desde el encabezado.")
-                    } else {
-                        EmptyState(Icons.Outlined.SearchOff, "Sin resultados", "Prueba con otro importe, concepto o filtro.")
+    }.value
+
+    LazyColumn(
+        modifier.fillMaxSize().imePadding(),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 24.dp)
+    ) {
+        item(key = "controls") {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                ScreenTitle("Movimientos", onQuickAdd.takeIf { hasMovements })
+                if (hasMovements) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it.take(120) },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Buscar movimiento") },
+                        placeholder = { Text("Importe, cuenta o categoría") },
+                        leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, tint = HomePalette.Blue) },
+                        trailingIcon = if (query.isNotEmpty()) {
+                            { IconButton(onClick = { query = "" }) { Icon(Icons.Outlined.Close, "Limpiar búsqueda") } }
+                        } else null,
+                        singleLine = true,
+                        shape = MaterialTheme.shapes.medium,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = HomePalette.Paper,
+                            unfocusedContainerColor = HomePalette.Paper,
+                            unfocusedBorderColor = HomePalette.Line
+                        ),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() })
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        movementFilters.forEach { (filter, label) ->
+                            val selected = type == filter
+                            FilterChip(
+                                selected = selected,
+                                onClick = { type = filter; focus.clearFocus() },
+                                label = { Text(label) },
+                                shape = MaterialTheme.shapes.small,
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = HomePalette.Paper,
+                                    labelColor = HomePalette.Navy,
+                                    selectedContainerColor = HomePalette.Navy,
+                                    selectedLabelColor = HomePalette.Paper
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = selected,
+                                    borderColor = HomePalette.Line
+                                )
+                            )
+                        }
                     }
                 }
             }
-            byDay.forEach { (day, entries) ->
+        }
+
+        when {
+            !hasMovements -> item(key = "first-movement") {
+                HistoryMessage(
+                    icon = Icons.AutoMirrored.Outlined.ReceiptLong,
+                    title = "Aún no tienes movimientos",
+                    description = "Registra un gasto o ingreso para verlo aquí.",
+                    actionLabel = "Registrar movimiento",
+                    onAction = onQuickAdd
+                )
+            }
+            grouped == null -> item(key = "loading") {
+                LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 16.dp))
+            }
+            grouped.isEmpty() -> item(key = "no-results") {
+                HistoryMessage(
+                    icon = Icons.Outlined.SearchOff,
+                    title = "Sin resultados",
+                    description = if (query.isBlank()) "Aún no tienes movimientos de este tipo."
+                        else "Prueba con otro importe, cuenta o categoría.",
+                    actionLabel = if (query.isBlank()) "Ver todos" else "Limpiar búsqueda y filtros",
+                    onAction = { query = ""; type = null; focus.clearFocus() }
+                )
+            }
+            else -> grouped.forEach { (day, entries) ->
                 item(key = "day-$day") {
-                    Text(day.format(dayLabel), Modifier.padding(top = 12.dp, bottom = 7.dp).semantics { heading() },
-                        style = MaterialTheme.typography.labelLarge, color = Graphite.Secondary)
-                    HorizontalDivider(color = Graphite.Divider)
+                    HistoryDayHeading(day, today)
                 }
-                items(entries, key = { it.id }) { entry ->
-                    EntryRow(entry, data.categories, data.accounts, showDate = false) { onSelect(entry) }
-                    HorizontalDivider(Modifier.padding(start = 50.dp), color = Graphite.Divider)
+                itemsIndexed(entries, key = { _, entry -> entry.id }) { index, entry ->
+                    val time = movementTime.format(Instant.ofEpochMilli(entry.occurredAt).atZone(zone))
+                    MovementRow(
+                        entry, categories[entry.categoryId], accounts, time,
+                        highlighted = highlightedEntryId == entry.id,
+                        showCategory = true
+                    ) { onSelect(entry) }
+                    if (index != entries.lastIndex) {
+                        HorizontalDivider(Modifier.padding(start = 52.dp), color = HomePalette.Line)
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun HistoryDayHeading(day: LocalDate, today: LocalDate) {
+    val date = day.format(if (day.year == today.year) shortDate else dateWithYear)
+    val title = when (day) {
+        today -> "Hoy · $date"
+        today.minusDays(1) -> "Ayer · $date"
+        else -> date
+    }
+    Row(
+        Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(6.dp).background(HomePalette.Blue, CircleShape))
+        Text(title, Modifier.semantics { heading() }, style = MaterialTheme.typography.labelLarge, color = HomePalette.Navy)
+        HorizontalDivider(Modifier.weight(1f), color = HomePalette.Line)
+    }
+}
+
+@Composable
+private fun HistoryMessage(
+    icon: ImageVector,
+    title: String,
+    description: String,
+    actionLabel: String,
+    onAction: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Box(Modifier.size(44.dp).background(HomePalette.IconBackground, CircleShape), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = HomePalette.Navy, modifier = Modifier.size(22.dp))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium, color = HomePalette.Navy)
+            Text(description, style = MaterialTheme.typography.bodyMedium, color = HomePalette.Muted)
+            TextButton(onClick = onAction, contentPadding = PaddingValues(end = 12.dp)) { Text(actionLabel) }
         }
     }
 }
