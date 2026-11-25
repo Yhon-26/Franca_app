@@ -24,6 +24,10 @@ class YapeReviewUiTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val cash = AccountEntity(1, "Efectivo")
     private val bank = AccountEntity(2, "BCP")
+    private val expenseCategories = listOf(
+        "Alimentación", "Transporte", "Compras", "Servicios", "Salud",
+        "Entretenimiento", "Educación", "Mascotas", "Supermercado"
+    ).mapIndexed { index, name -> CategoryEntity(index + 1L, name, "", EntryType.EXPENSE) }
     private var savedAccount: Long? = null
     private var savedCategory: Long? = null
     private var discarded = false
@@ -122,27 +126,26 @@ class YapeReviewUiTest {
         compose.runOnIdle { assertTrue(discarded) }
     }
 
-    @Test fun categoriesUseRecentHistoryAndSeparateSearchSheet() {
-        val categories = (1L..9L).map { CategoryEntity(it, "Categoría $it", "", EntryType.EXPENSE) }
+    @Test fun categoriesUseTheRegistrationPickerAndShowHistorySuggestions() {
         val history = listOf(TransactionEntity(1, EntryType.EXPENSE, 1250, 1, categoryId = 9))
-        show(listOf(cash), categories = categories, history = history)
-        compose.onNodeWithText("Categoría 9 · Sugerida").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Categoría 6").assertDoesNotExist()
-        compose.onNodeWithText("Más…").performScrollTo().performClick()
+        show(listOf(cash), categories = expenseCategories, history = history)
+        compose.onNodeWithText("Transporte").assertDoesNotExist()
+        compose.onNodeWithText("Categoría").performScrollTo().performClick()
         compose.onNodeWithText("Elegir categoría").assertIsDisplayed()
-        compose.onNodeWithText("Buscar categoría").performTextInput("Categoría 7")
+        compose.onNodeWithText("Yape · Gasto").assertIsDisplayed()
+        compose.onNodeWithText("Sugerida · Supermercado").assertIsDisplayed()
         capture("yape-categorias.png")
-        compose.onNode(hasText("Categoría 7") and !hasSetTextAction()).performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Buscar categoría").performTextInput("educacion")
+        compose.onNodeWithText("Educación").performClick()
         compose.onNodeWithText("Elegir categoría").assertDoesNotExist()
-        compose.onNodeWithText("Categoría 7", substring = false).performScrollTo().assertIsSelected()
+        compose.onNode(hasText("Categoría") and hasText("Educación")).assertIsDisplayed()
         compose.onNodeWithText("Guardar gasto").performClick()
         compose.runOnIdle { assertEquals(7L, savedCategory) }
     }
 
     @SdkSuppress(minSdkVersion = 29)
     @Test fun footerStaysAboveVisibleKeyboardWhenFormScrolls() {
-        val categories = (1L..9L).map { CategoryEntity(it, "Categoría $it", "", EntryType.EXPENSE) }
-        show(listOf(cash, bank), defaultId = 2, categories = categories)
+        show(listOf(cash, bank), defaultId = 2, categories = expenseCategories)
         compose.waitForIdle()
         captureReviewSheet("yape-formulario.png")
         compose.onNodeWithText("Monto en soles").performClick()
@@ -157,7 +160,7 @@ class YapeReviewUiTest {
         compose.onNodeWithText("Guardar gasto").assertIsDisplayed()
         compose.onNodeWithText("Descartar aviso").assertIsDisplayed()
         val before = compose.onNodeWithText("Guardar gasto").fetchSemanticsNode().boundsInWindow
-        compose.onNodeWithText("Más…").performScrollTo()
+        compose.onNodeWithText("Categoría").performScrollTo()
         val after = compose.onNodeWithText("Guardar gasto").fetchSemanticsNode().boundsInWindow
         assertEquals(before.top, after.top, 1f)
         assertEquals(before.bottom, after.bottom, 1f)

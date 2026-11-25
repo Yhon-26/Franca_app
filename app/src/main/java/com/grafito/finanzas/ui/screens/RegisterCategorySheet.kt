@@ -69,7 +69,7 @@ internal fun RegisterCategorySheet(
                 IconButton(onClick = { finish(onDismiss) }) {
                     Box(Modifier.size(40.dp).background(HomePalette.Paper, MaterialTheme.shapes.small),
                         contentAlignment = Alignment.Center) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Volver a Registrar", tint = HomePalette.Navy,
+                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Volver al formulario", tint = HomePalette.Navy,
                             modifier = Modifier.size(19.dp))
                     }
                 }

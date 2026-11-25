@@ -22,11 +22,12 @@
         </activity>
         <activity
             android:name=".receipts.BcpMailReviewActivity"
+            android:theme="@style/Theme.Franca.PaymentReview"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".notifications.YapeReviewActivity"
-            android:theme="@style/Theme.Franca.YapeReview"
+            android:theme="@style/Theme.Franca.PaymentReview"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
         <!-- Android's notification player reads only the built-in tone files from this provider. -->

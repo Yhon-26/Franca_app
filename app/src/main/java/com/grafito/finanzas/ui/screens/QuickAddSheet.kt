@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.grafito.finanzas.data.AccountEntity
+import com.grafito.finanzas.data.CategoryEntity
 import com.grafito.finanzas.data.EntryType
 import com.grafito.finanzas.data.FavoriteEntity
 import com.grafito.finanzas.data.TransactionEntity
@@ -182,10 +183,8 @@ fun QuickAddSheet(
                         enabled = !saving && data.accounts.isNotEmpty(),
                         onClick = { openPicker(RegisterPicker.ACCOUNT) }
                     )
-                    RegisterRow(
-                        title = "Categoría",
-                        icon = category?.let(::categoryIcon) ?: Icons.Outlined.Category,
-                        value = category?.name ?: "Opcional",
+                    RegisterCategoryField(
+                        category = category,
                         enabled = !saving,
                         onClick = { openPicker(RegisterPicker.CATEGORY) }
                     )
@@ -397,6 +396,17 @@ private fun ShortcutDetails(note: String, onNoteChange: (String) -> Unit, expand
             }
         }
     }
+}
+
+@Composable
+internal fun RegisterCategoryField(category: CategoryEntity?, enabled: Boolean, onClick: () -> Unit) {
+    RegisterRow(
+        title = "Categoría",
+        icon = category?.let(::categoryIcon) ?: Icons.Outlined.Category,
+        value = category?.name ?: "Opcional",
+        enabled = enabled,
+        onClick = onClick
+    )
 }
 
 @Composable

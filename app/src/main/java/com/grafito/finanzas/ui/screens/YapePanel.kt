@@ -69,11 +69,9 @@ import com.grafito.finanzas.notifications.YapeAlerts
 import com.grafito.finanzas.notifications.FrancaNotices
 import com.grafito.finanzas.notifications.YapeNotificationListener
 import com.grafito.finanzas.notifications.YapeSentAccessibilityService
-import com.grafito.finanzas.ui.components.CategorySelectionSheet
 import com.grafito.finanzas.ui.components.FrancaCue
 import com.grafito.finanzas.ui.components.LocalFrancaSounds
 import com.grafito.finanzas.ui.components.MascotGreeting
-import com.grafito.finanzas.ui.components.categoryIcon
 import com.grafito.finanzas.ui.components.movementSavedMessage
 import com.grafito.finanzas.ui.theme.GrafitoTheme
 import com.grafito.finanzas.ui.theme.HomePalette
@@ -454,8 +452,6 @@ internal fun YapeForm(candidate: YapeSuggestion, accounts: List<AccountEntity>, 
     var otherAccountId by rememberSaveable(candidate.id) { mutableStateOf<Long?>(null) }
     var showCategories by rememberSaveable(candidate.id) { mutableStateOf(false) }
     var confirmDiscard by rememberSaveable(candidate.id) { mutableStateOf(false) }
-    val focus = LocalFocusManager.current
-    val keyboard = LocalSoftwareKeyboardController.current
     val cents = Money.parse(amount)
     val account = accounts.find { it.id == accountId }
     val otherAccount = accounts.find { it.id == otherAccountId && it.id != accountId }
@@ -464,10 +460,6 @@ internal fun YapeForm(candidate: YapeSuggestion, accounts: List<AccountEntity>, 
     val entryType = if (candidate.outgoing) EntryType.EXPENSE else EntryType.INCOME
     val suggestion = remember(transactions, cents, entryType, categoryId, categories) {
         if (categoryId == null) suggestCategory(transactions, categories, entryType, cents) else null
-    }
-    val recentCategories = remember(transactions, categories, entryType) {
-        val recentIds = transactions.filter { it.type == entryType }.mapNotNull { it.categoryId }.distinct()
-        (recentIds.mapNotNull { id -> categories.find { it.id == id } } + categories).distinctBy { it.id }.take(6)
     }
     val selectedCategory = categories.find { it.id == categoryId }
     val missing = when {
@@ -483,6 +475,8 @@ internal fun YapeForm(candidate: YapeSuggestion, accounts: List<AccountEntity>, 
         scrimColor = HomePalette.Navy.copy(alpha = 0.28f),
         dragHandle = null
     ) {
+        val focus = LocalFocusManager.current
+        val keyboard = LocalSoftwareKeyboardController.current
         Column(Modifier.fillMaxWidth().fillMaxHeight(0.95f).imePadding()) {
             Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
@@ -530,24 +524,10 @@ internal fun YapeForm(candidate: YapeSuggestion, accounts: List<AccountEntity>, 
                         }
                     }
                 } else {
-                    Text("Categoría (opcional)", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        recentCategories.forEach { category ->
-                            FilterChip(selected = category.id == categoryId,
-                                onClick = { categoryId = category.id.takeUnless { it == categoryId } }, enabled = !busy,
-                                label = { Text(if (category.id == suggestion?.id) "${category.name} · Sugerida" else category.name) },
-                                leadingIcon = { Icon(categoryIcon(category), null, Modifier.size(18.dp)) })
-                        }
-                        FilterChip(selected = showCategories, enabled = !busy && categories.isNotEmpty(),
-                            onClick = { focus.clearFocus(); keyboard?.hide(); showCategories = true }, label = { Text("Más…") })
-                    }
-                    if (suggestion != null && recentCategories.none { it.id == suggestion.id }) {
-                        SuggestionChip(onClick = { categoryId = suggestion.id }, enabled = !busy,
-                            label = { Text("Sugerida · ${suggestion.name}") })
-                    }
-                    if (selectedCategory != null && recentCategories.none { it.id == selectedCategory.id }) {
-                        FilterChip(selected = true, onClick = { categoryId = null }, enabled = !busy,
-                            label = { Text(selectedCategory.name) })
+                    RegisterCategoryField(selectedCategory, enabled = !busy) {
+                        focus.clearFocus()
+                        keyboard?.hide()
+                        showCategories = true
                     }
                 }
             }
@@ -560,7 +540,7 @@ internal fun YapeForm(candidate: YapeSuggestion, accounts: List<AccountEntity>, 
                         if (account != null && cents != null && (!transfer || otherAccount != null)) {
                             focus.clearFocus()
                             keyboard?.hide()
-                            onConfirm(account.id, cents, categoryId.takeUnless { transfer }, otherAccount?.id.takeIf { transfer })
+                            onConfirm(account.id, cents, selectedCategory?.id.takeUnless { transfer }, otherAccount?.id.takeIf { transfer })
                         }
                     }) {
                     Text(if (busy) "Guardando…" else if (transfer) "Guardar transferencia"
@@ -576,9 +556,13 @@ internal fun YapeForm(candidate: YapeSuggestion, accounts: List<AccountEntity>, 
             }
         }
     }
-    if (showCategories) {
-        CategorySelectionSheet(categories, categoryId, onSelect = { categoryId = it; showCategories = false },
-            onDismiss = { showCategories = false }, suggestion = suggestion)
+    if (showCategories && !transfer) {
+        RegisterCategorySheet(
+            categories, selectedCategory?.id, registrationContext = "Yape · $entryLabel",
+            onSelect = { categoryId = it; showCategories = false },
+            onDismiss = { showCategories = false },
+            suggestion = suggestion
+        )
     }
     if (confirmDiscard) {
         AlertDialog(onDismissRequest = { confirmDiscard = false }, title = { Text("¿Descartar aviso?") },
