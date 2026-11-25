@@ -29,6 +29,7 @@ import com.grafito.finanzas.data.TransactionEntity
 import com.grafito.finanzas.model.FinanceState
 import com.grafito.finanzas.model.FinanceMath
 import com.grafito.finanzas.model.ReportExpenseSelection
+import com.grafito.finanzas.model.MovementDateFilter
 import com.grafito.finanzas.model.filterMovements
 import com.grafito.finanzas.ui.components.MovementRow
 import com.grafito.finanzas.ui.components.ScreenTitle
@@ -45,6 +46,8 @@ private val historyLocale = Locale.forLanguageTag("es-PE")
 private val shortDate = DateTimeFormatter.ofPattern("d MMM", historyLocale)
 private val dateWithYear = DateTimeFormatter.ofPattern("d MMM yyyy", historyLocale)
 private val movementTime = DateTimeFormatter.ofPattern("HH:mm", historyLocale)
+private enum class HistoryFilterPanel { ACCOUNT, DATE, RANGE }
+
 private val movementFilters = listOf(
     null to "Todos",
     EntryType.EXPENSE to "Gastos",
@@ -65,19 +68,37 @@ internal fun HistoryScreen(
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var type by rememberSaveable { mutableStateOf<String?>(null) }
+    var accountId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var dateFilter by rememberSaveable { mutableStateOf(MovementDateFilter.ALL) }
+    var startDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    var endDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    var panel by rememberSaveable { mutableStateOf<HistoryFilterPanel?>(null) }
     val focus = LocalFocusManager.current
     val accounts = remember(data.accounts) { data.accounts.associateBy { it.id } }
     val categories = remember(data.categories) { data.categories.associateBy { it.id } }
     val zone = ZoneId.systemDefault()
     val today = LocalDate.now(zone)
     val hasMovements = data.transactions.isNotEmpty()
+    val selectedAccount = accounts[accountId]
+    val startDate = startDay?.let(LocalDate::ofEpochDay)
+    val endDate = endDay?.let(LocalDate::ofEpochDay)
+    val period = if (reportSelection == null) dateFilter.range(today, zone, startDate, endDate) else null
+    val hasExtraFilters = selectedAccount != null || period != null
+
+    fun clearFilters() {
+        type = null
+        accountId = null
+        dateFilter = MovementDateFilter.ALL
+        startDay = null
+        endDay = null
+    }
     val grouped = key(data.transactions, accounts, categories, zone, reportSelection) {
-        produceState<Map<LocalDate, List<TransactionEntity>>?>(null, query, type) {
+        produceState<Map<LocalDate, List<TransactionEntity>>?>(null, query, type, selectedAccount?.id, period) {
             value = withContext(Dispatchers.Default) {
                 val entries = if (reportSelection == null) data.transactions else FinanceMath.reportExpenses(
                     data.transactions, FinanceMath.monthRange(reportSelection.month, zone), reportSelection.categoryId
                 )
-                filterMovements(entries, accounts, categories, query, type).groupBy { entry ->
+                filterMovements(entries, accounts, categories, query, type, selectedAccount?.id, period).groupBy { entry ->
                     Instant.ofEpochMilli(entry.occurredAt).atZone(zone).toLocalDate()
                 }
             }
@@ -116,6 +137,14 @@ internal fun HistoryScreen(
                         ),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() })
+                    )
+                    HistoryFilterControls(
+                        account = selectedAccount,
+                        periodLabel = period?.let { movementPeriodLabel(dateFilter, startDate, endDate) },
+                        showDateFilter = reportSelection == null,
+                        onDate = { focus.clearFocus(); panel = HistoryFilterPanel.DATE },
+                        onAccount = { focus.clearFocus(); panel = HistoryFilterPanel.ACCOUNT },
+                        onClear = if (hasExtraFilters && grouped?.isEmpty() != true) { { clearFilters(); focus.clearFocus() } } else null
                     )
                     if (reportSelection == null) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         movementFilters.forEach { (filter, label) ->
@@ -158,12 +187,14 @@ internal fun HistoryScreen(
             }
             grouped.isEmpty() -> item(key = "no-results") {
                 val description = when {
+                    hasExtraFilters -> "Prueba con otros filtros o quítalos para ampliar los resultados."
                     query.isNotBlank() -> "Prueba con otro importe, cuenta o concepto."
                     reportSelection != null -> "Ya no hay gastos de esta categoría en el mes seleccionado."
                     else -> "Aún no tienes movimientos de este tipo."
                 }
                 val actionLabel = when {
-                    reportSelection == null && query.isNotBlank() -> "Limpiar búsqueda y filtros"
+                    query.isNotBlank() && (reportSelection == null || hasExtraFilters) -> "Limpiar búsqueda y filtros"
+                    hasExtraFilters -> "Limpiar filtros"
                     reportSelection == null -> "Ver todos"
                     query.isNotBlank() -> "Limpiar búsqueda"
                     else -> "Volver a Reportes"
@@ -174,9 +205,9 @@ internal fun HistoryScreen(
                     description = description,
                     actionLabel = actionLabel,
                     onAction = {
-                        if (reportSelection != null && query.isBlank()) onBackToReport() else {
+                        if (reportSelection != null && query.isBlank() && !hasExtraFilters) onBackToReport() else {
                             query = ""
-                            type = null
+                            clearFilters()
                             focus.clearFocus()
                         }
                     }
@@ -199,6 +230,26 @@ internal fun HistoryScreen(
                 }
             }
         }
+    }
+
+    when (panel) {
+        HistoryFilterPanel.ACCOUNT -> HistoryAccountPicker(data.accounts, selectedAccount?.id, onDismiss = { panel = null }) {
+            accountId = it
+            panel = null
+        }
+        HistoryFilterPanel.DATE -> HistoryPeriodPicker(dateFilter, onDismiss = { panel = null }) {
+            if (it == MovementDateFilter.CUSTOM) panel = HistoryFilterPanel.RANGE else {
+                dateFilter = it
+                panel = null
+            }
+        }
+        HistoryFilterPanel.RANGE -> HistoryRangePicker(startDate, endDate, today, onDismiss = { panel = HistoryFilterPanel.DATE }) { start, end ->
+            startDay = start.toEpochDay()
+            endDay = end.toEpochDay()
+            dateFilter = MovementDateFilter.CUSTOM
+            panel = null
+        }
+        null -> Unit
     }
 }
 

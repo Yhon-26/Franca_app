@@ -8,6 +8,8 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
 import androidx.datastore.preferences.core.edit
+import androidx.compose.material3.DatePickerDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -34,6 +36,7 @@ import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.TextStyle
 import java.util.Locale
 
@@ -384,6 +387,13 @@ class FinanceUiTest {
         compose.activityRule.scenario.recreate()
         compose.onNodeWithText("Transporte · ${reportMonthLabel(current)}").assertIsDisplayed()
         compose.waitUntil(10_000) { pasaje.isDisplayed() }
+        compose.onNodeWithText("Cuenta").performClick()
+        compose.onNodeWithText("Yape").performClick()
+        compose.waitUntil(10_000) { compose.onNodeWithText("Sin resultados").isDisplayed() }
+        compose.onNodeWithText("Transporte · ${reportMonthLabel(current)}").assertIsDisplayed()
+        compose.onNodeWithText("Limpiar filtros").performClick()
+        compose.waitUntil(10_000) { pasaje.isDisplayed() }
+        compose.onNodeWithText("Taxi del mes pasado").assertDoesNotExist()
         val drillDown = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
         try {
             File(compose.activity.getExternalFilesDir(null), "franca-reportes-movimientos.png").outputStream().use {
@@ -479,6 +489,70 @@ class FinanceUiTest {
         compose.onNodeWithText("Limpiar búsqueda y filtros").performClick()
         compose.onNodeWithText("Todos").assertIsSelected()
         compose.waitUntil(10_000) { expense.isDisplayed() && income.isDisplayed() }
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Test fun historyCombinesAccountTypeAndPeriodAndRestoresThemAfterRecreation() {
+        val zone = ZoneId.systemDefault()
+        val thisMonth = YearMonth.now(zone)
+        val previous = thisMonth.minusMonths(1)
+        fun time(month: YearMonth, day: Int) = month.atDay(day).atTime(22, 30).atZone(zone).toInstant().toEpochMilli()
+        runBlocking {
+            val original = repository.snapshot()
+            repository.restore(original.copy(transactions = listOf(
+                TransactionEntity(1, EntryType.EXPENSE, 1250, 2, categoryId = 1, note = "Taxi con Yape", occurredAt = time(previous, 12)),
+                TransactionEntity(2, EntryType.EXPENSE, 3500, 1, note = "Compra en efectivo", occurredAt = time(previous, 12)),
+                TransactionEntity(3, EntryType.EXPENSE, 1850, 2, note = "Café de este mes", occurredAt = time(thisMonth, 8)),
+                TransactionEntity(4, EntryType.TRANSFER, 5000, 1, toAccountId = 2, occurredAt = time(previous, 10))
+            )))
+        }
+        compose.onNodeWithContentDescription("Historial").performClick()
+        val taxi = compose.onNodeWithText("Taxi con Yape")
+        val cash = compose.onNodeWithText("Compra en efectivo")
+        val cafe = compose.onNodeWithText("Café de este mes")
+        val transfer = compose.onNodeWithText("Transferencia")
+        compose.waitUntil(10_000) { cafe.isDisplayed() }
+
+        compose.onNodeWithText("Fecha").performClick()
+        compose.onNodeWithText("Mes pasado").performClick()
+        compose.onNodeWithText("Cuenta").performClick()
+        compose.onNodeWithText("Yape").performClick()
+        compose.waitUntil(10_000) { taxi.isDisplayed() && transfer.isDisplayed() }
+        cash.assertDoesNotExist()
+        cafe.assertDoesNotExist()
+        compose.onNodeWithText("Gastos").performClick()
+        compose.waitUntil(10_000) { !transfer.isDisplayed() }
+
+        compose.activityRule.scenario.recreate()
+        compose.onNodeWithText("Fecha · Mes pasado").assertIsSelected()
+        compose.onNodeWithText("Cuenta · Yape").assertIsSelected()
+        compose.onNodeWithText("Gastos").assertIsSelected()
+        compose.waitUntil(10_000) { taxi.isDisplayed() }
+        val screenshot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        try {
+            File(compose.activity.getExternalFilesDir(null), "franca-filtros-movimientos.png").outputStream().use {
+                screenshot.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+        } finally {
+            screenshot.recycle()
+        }
+
+        compose.onNodeWithText("Fecha · Mes pasado").performClick()
+        compose.onNodeWithText("Rango personalizado").performScrollTo().performClick()
+        compose.onNodeWithText("Aplicar fechas").assertIsNotEnabled()
+        val dateFormatter = DatePickerDefaults.dateFormatter()
+        for (day in listOf(2, 8)) {
+            val millis = thisMonth.atDay(day).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            val label = requireNotNull(dateFormatter.formatDate(millis, Locale.getDefault(), forContentDescription = true))
+            compose.onNode(hasText(label, substring = true) and hasClickAction()).performClick()
+        }
+        compose.onNodeWithText("Aplicar fechas").assertIsEnabled().performClick()
+        compose.waitUntil(10_000) { cafe.isDisplayed() }
+        taxi.assertDoesNotExist()
+        compose.onNodeWithText("Limpiar filtros").performClick()
+        compose.onNodeWithText("Fecha").assertIsNotSelected()
+        compose.onNodeWithText("Cuenta").assertIsNotSelected()
+        compose.onNodeWithText("Todos").assertIsSelected()
     }
 
     private fun assertDeskSceneAdvances(): Rect {
