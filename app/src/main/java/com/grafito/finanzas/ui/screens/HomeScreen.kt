@@ -1,5 +1,6 @@
 package com.grafito.finanzas.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -11,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.ListAlt
 import androidx.compose.material.icons.outlined.NorthEast
 import androidx.compose.material.icons.outlined.SouthWest
 import androidx.compose.material.icons.outlined.StarOutline
@@ -58,12 +60,23 @@ internal fun HomeScreen(
     pendingYape: List<YapeSuggestion>,
     highlightedEntryId: Long?,
     modifier: Modifier = Modifier,
+    showYapeInbox: Boolean,
+    reviewingYape: Boolean,
+    onOpenYapeInbox: () -> Unit,
+    onCloseYapeInbox: () -> Unit,
     onReviewYape: (String) -> Unit,
     onNewFavorite: () -> Unit,
     onSeeAll: () -> Unit,
     onSelect: (TransactionEntity) -> Unit,
     onFavorite: (FavoriteEntity) -> Unit
 ) {
+    val homeScroll = rememberScrollState()
+    if (showYapeInbox) {
+        BackHandler(enabled = !reviewingYape, onBack = onCloseYapeInbox)
+        YapePendingScreen(pendingYape, modifier, onCloseYapeInbox, onReviewYape)
+        return
+    }
+
     val zone = ZoneId.systemDefault()
     val month = YearMonth.now(zone)
     val (incomes, expenses) = remember(data.transactions, month, zone) {
@@ -76,7 +89,7 @@ internal fun HomeScreen(
     val categories = remember(data.categories) { data.categories.associateBy { it.id } }
 
     Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState())
+        modifier.fillMaxSize().verticalScroll(homeScroll)
             .padding(top = 12.dp, bottom = 84.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -93,7 +106,9 @@ internal fun HomeScreen(
             BalanceCard(balance, data.accounts.size, incomes, expenses)
             ThreeDotRule(Modifier.fillMaxWidth().height(6.dp))
             pendingYape.firstOrNull()?.let { latest ->
-                HomePendingYape(latest, pendingYape.size) { onReviewYape(latest.id) }
+                HomePendingYape(latest, pendingYape.size) {
+                    if (pendingYape.size == 1) onReviewYape(latest.id) else onOpenYapeInbox()
+                }
             }
             YapeSentConnectionNotice()
         }
@@ -150,17 +165,20 @@ private fun HomePendingYape(latest: YapeSuggestion, count: Int, onClick: () -> U
         else -> "Yapeos por revisar"
     }
     val direction = if (latest.outgoing) "Enviado" else "Recibido"
-    val detail = "$direction · ${Money.format(latest.amountCents)}"
+    val detail = if (count == 1) "$direction · ${Money.format(latest.amountCents)}" else "Elige cuál revisar"
+    val icon = when {
+        count > 1 -> Icons.Outlined.ListAlt
+        latest.outgoing -> Icons.Outlined.NorthEast
+        else -> Icons.Outlined.SouthWest
+    }
     Surface(onClick = onClick, modifier = Modifier.fillMaxWidth(), color = HomePalette.Paper,
         shape = MaterialTheme.shapes.medium, border = BorderStroke(1.dp, HomePalette.Line)) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            HomeIcon(if (latest.outgoing) Icons.Outlined.NorthEast else Icons.Outlined.SouthWest,
-                Modifier.size(40.dp), 20.dp)
+            HomeIcon(icon, Modifier.size(40.dp), 20.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                Text(if (count > 1) "Último · $detail" else detail, style = MaterialTheme.typography.bodySmall,
-                    color = HomePalette.Muted)
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = HomePalette.Muted)
             }
             Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null,
                 tint = HomePalette.Blue, modifier = Modifier.size(20.dp))
