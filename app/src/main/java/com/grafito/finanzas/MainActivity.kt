@@ -96,6 +96,7 @@ private fun MainApp(vm: FinanceViewModel, window: Window) {
     var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
     var transferId by rememberSaveable { mutableStateOf<Long?>(null) }
     var yapeReviewId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showYapeInbox by rememberSaveable { mutableStateOf(false) }
     var highlightedEntryId by remember { mutableStateOf<Long?>(null) }
     val editing = data.transactions.find { it.id == editingId }
     val sourceShortcut = data.favorites.find { it.id == sourceShortcutId }
@@ -203,7 +204,7 @@ private fun MainApp(vm: FinanceViewModel, window: Window) {
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
                 snackbarHost = { SnackbarHost(snackbars) },
                 floatingActionButton = {
-                    if (isHome && !loadError && data.isLoaded && data.accounts.isNotEmpty()) {
+                    if (isHome && !showYapeInbox && !loadError && data.isLoaded && data.accounts.isNotEmpty()) {
                         HomeRegisterButton(onClick = { openCreate() })
                     }
                 },
@@ -232,6 +233,10 @@ private fun MainApp(vm: FinanceViewModel, window: Window) {
                                             pendingYape = pending,
                                             highlightedEntryId = highlightedEntryId,
                                             modifier = page,
+                                            showYapeInbox = showYapeInbox,
+                                            reviewingYape = yapeReviewId != null,
+                                            onOpenYapeInbox = { playSound(FrancaCue.TAP); showYapeInbox = true },
+                                            onCloseYapeInbox = { showYapeInbox = false },
                                             onReviewYape = { playSound(FrancaCue.TAP); yapeReviewId = it },
                                             onNewFavorite = { openCreate(asShortcut = true) },
                                             onSeeAll = { currentTab = Tab.HISTORY },

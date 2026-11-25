@@ -6,6 +6,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.UiAutomation
 import android.content.ComponentName
+import android.graphics.Bitmap
 import android.os.Build
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.Role
@@ -18,10 +19,12 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.grafito.finanzas.data.*
 import com.grafito.finanzas.ui.theme.HomePalette
 import com.grafito.finanzas.model.FinanceMath
+import com.grafito.finanzas.model.Money
 import com.grafito.finanzas.notifications.YapeAlerts
 import com.grafito.finanzas.notifications.FrancaNotices
 import com.grafito.finanzas.notifications.YapeNotificationListener
 import com.grafito.finanzas.notifications.YapeSentAccessibilityService
+import java.io.File
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -126,7 +129,18 @@ class YapePilotTest {
         }
     }
 
-    @Test fun homeOpensNewestYapeAndUndoRestoresOriginalPendingNotice() {
+    @Test fun aSinglePendingYapeOpensTheReviewDirectly() {
+        val notice = sentSuggestion().copy(amountCents = 4250, outgoing = false)
+        assertTrue(runBlocking { YapeInbox(db).record(notice) })
+        val pending = compose.onNodeWithText("1 yapeo por revisar")
+        compose.waitUntil(10_000) { pending.isDisplayed() }
+        pending.performClick()
+        compose.onNodeWithText("Revisar ingreso de Yape").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Cerrar revisión").performClick()
+        pending.assertIsDisplayed()
+    }
+
+    @Test fun homeLetsYouChooseYapeAndUndoRestoresTheOriginalNotice() {
         val inbox = YapeInbox(db)
         val newest = sentSuggestion()
         val older = sentSuggestion().copy(
@@ -134,39 +148,58 @@ class YapePilotTest {
             receivedAt = newest.receivedAt - 60_000,
             outgoing = false
         )
-        compose.onNodeWithText("1 yapeo por revisar").assertDoesNotExist()
         runBlocking {
             assertTrue(inbox.record(older))
             assertTrue(inbox.record(newest))
         }
-        compose.waitUntil(10_000) {
-            compose.onAllNodesWithText("2 yapeos por revisar").fetchSemanticsNodes().isNotEmpty()
+        val pending = compose.onNodeWithText("2 yapeos por revisar")
+        compose.waitUntil(10_000) { pending.isDisplayed() }
+        pending.performClick()
+
+        compose.onNodeWithText("Yapeos por revisar").assertIsDisplayed()
+        val received = compose.onNode(hasText("Yape recibido") and hasText(Money.format(older.amountCents)))
+        val sent = compose.onNode(hasText("Yape enviado") and hasText(Money.format(newest.amountCents)))
+        received.assertIsDisplayed()
+        sent.assertIsDisplayed()
+        assertTrue(sent.fetchSemanticsNode().boundsInWindow.top < received.fetchSemanticsNode().boundsInWindow.top)
+        val screenshot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        try {
+            File(app.getExternalFilesDir(null), "franca-bandeja-yape.png").outputStream().use {
+                screenshot.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+        } finally {
+            screenshot.recycle()
         }
-        compose.onNodeWithText("2 yapeos por revisar").performClick()
+
+        received.performClick()
+        compose.onNodeWithText("Revisar ingreso de Yape").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Cerrar revisión").performClick()
+        received.assertIsDisplayed()
+
+        sent.performClick()
         compose.onNodeWithText("Revisar Yape enviado").assertIsDisplayed()
         assertSaveButtonUsesFrancaBlue("Guardar gasto")
         compose.onNodeWithText("Monto en soles").performTextReplacement("15.20")
         compose.onNodeWithText("Guardar gasto").performClick()
 
-        compose.waitUntil(10_000) {
-            compose.onAllNodesWithText("Gasto guardado").fetchSemanticsNodes().isNotEmpty()
-        }
+        val savedNotice = compose.onNodeWithText("Gasto guardado")
+        compose.waitUntil(10_000) { savedNotice.isDisplayed() && received.isDisplayed() }
+        sent.assertDoesNotExist()
         runBlocking {
             val saved = db.dao().allTransactions().single()
             assertEquals(newest.id, saved.receiptFingerprint)
             assertEquals(1520L, saved.amountCents)
             assertEquals(older, inbox.pending.first().single())
         }
-        compose.onNodeWithText("1 yapeo por revisar").assertExists()
         compose.onNodeWithText("Deshacer").performClick()
-        compose.waitUntil(10_000) {
-            compose.onAllNodesWithText("2 yapeos por revisar").fetchSemanticsNodes().isNotEmpty()
-        }
+        compose.waitUntil(10_000) { sent.isDisplayed() }
         runBlocking {
             assertTrue(db.dao().allTransactions().isEmpty())
             assertEquals(listOf(newest, older), inbox.pending.first())
             assertFalse(inbox.record(newest))
         }
+        compose.onNodeWithContentDescription("Volver a Inicio").performClick()
+        pending.assertIsDisplayed()
     }
 
     @Test fun receivesNewPaymentAfterRemovingFrancaTask() {
