@@ -33,4 +33,22 @@ class FinanceMathTest {
         )
         assertEquals(MonthlyTotals(200, 300), FinanceMath.monthlyTotals(entries, january))
     }
+
+    @Test fun monthlyReportTotalsReconcileWithCategoryDetails() {
+        val range = FinanceMath.monthRange(YearMonth.of(2027, 2), ZoneId.of("America/Lima"))
+        val entries = listOf(
+            TransactionEntity(1, EntryType.EXPENSE, 500, 1, categoryId = 1, occurredAt = range.first),
+            TransactionEntity(2, EntryType.EXPENSE, 750, 1, categoryId = 1, occurredAt = range.last),
+            TransactionEntity(3, EntryType.EXPENSE, 300, 1, occurredAt = range.first),
+            TransactionEntity(4, EntryType.INCOME, 2000, 1, categoryId = 2, occurredAt = range.first),
+            TransactionEntity(5, EntryType.TRANSFER, 800, 1, toAccountId = 2, occurredAt = range.first),
+            TransactionEntity(6, EntryType.EXPENSE, 100, 1, categoryId = 1, occurredAt = range.first - 1),
+            TransactionEntity(7, EntryType.EXPENSE, 100, 1, occurredAt = range.last + 1)
+        )
+        val report = FinanceMath.monthlyReport(entries, range)
+        assertEquals(MonthlyTotals(2000, 1550), report.totals)
+        assertEquals(listOf(CategorySpending(1L, 1250), CategorySpending(null, 300)), report.expensesByCategory)
+        assertEquals(listOf(1L, 2L), FinanceMath.reportExpenses(entries, range, 1).map { it.id })
+        assertEquals(listOf(3L), FinanceMath.reportExpenses(entries, range, null).map { it.id })
+    }
 }

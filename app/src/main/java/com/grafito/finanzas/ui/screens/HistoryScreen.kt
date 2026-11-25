@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Search
@@ -26,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import com.grafito.finanzas.data.EntryType
 import com.grafito.finanzas.data.TransactionEntity
 import com.grafito.finanzas.model.FinanceState
+import com.grafito.finanzas.model.FinanceMath
+import com.grafito.finanzas.model.ReportExpenseSelection
 import com.grafito.finanzas.model.filterMovements
 import com.grafito.finanzas.ui.components.MovementRow
 import com.grafito.finanzas.ui.components.ScreenTitle
@@ -55,6 +58,8 @@ internal fun HistoryScreen(
     data: FinanceState,
     modifier: Modifier = Modifier,
     highlightedEntryId: Long? = null,
+    reportSelection: ReportExpenseSelection? = null,
+    onBackToReport: () -> Unit = {},
     onSelect: (TransactionEntity) -> Unit,
     onQuickAdd: () -> Unit
 ) {
@@ -66,10 +71,13 @@ internal fun HistoryScreen(
     val zone = ZoneId.systemDefault()
     val today = LocalDate.now(zone)
     val hasMovements = data.transactions.isNotEmpty()
-    val grouped = key(data.transactions, accounts, categories, zone) {
+    val grouped = key(data.transactions, accounts, categories, zone, reportSelection) {
         produceState<Map<LocalDate, List<TransactionEntity>>?>(null, query, type) {
             value = withContext(Dispatchers.Default) {
-                filterMovements(data.transactions, accounts, categories, query, type).groupBy { entry ->
+                val entries = if (reportSelection == null) data.transactions else FinanceMath.reportExpenses(
+                    data.transactions, FinanceMath.monthRange(reportSelection.month, zone), reportSelection.categoryId
+                )
+                filterMovements(entries, accounts, categories, query, type).groupBy { entry ->
                     Instant.ofEpochMilli(entry.occurredAt).atZone(zone).toLocalDate()
                 }
             }
@@ -82,7 +90,12 @@ internal fun HistoryScreen(
     ) {
         item(key = "controls") {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                ScreenTitle("Movimientos", onQuickAdd.takeIf { hasMovements })
+                if (reportSelection == null) {
+                    ScreenTitle("Movimientos", onQuickAdd.takeIf { hasMovements })
+                } else {
+                    val category = categories[reportSelection.categoryId]?.name ?: "Sin categoría"
+                    ReportHistoryHeading(category, reportMonthLabel(reportSelection.month), onBackToReport)
+                }
                 if (hasMovements) {
                     OutlinedTextField(
                         value = query,
@@ -104,7 +117,7 @@ internal fun HistoryScreen(
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() })
                     )
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (reportSelection == null) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         movementFilters.forEach { (filter, label) ->
                             val selected = type == filter
                             FilterChip(
@@ -131,7 +144,7 @@ internal fun HistoryScreen(
         }
 
         when {
-            !hasMovements -> item(key = "first-movement") {
+            !hasMovements && reportSelection == null -> item(key = "first-movement") {
                 HistoryMessage(
                     icon = Icons.AutoMirrored.Outlined.ReceiptLong,
                     title = "Aún no tienes movimientos",
@@ -144,13 +157,29 @@ internal fun HistoryScreen(
                 LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 16.dp))
             }
             grouped.isEmpty() -> item(key = "no-results") {
+                val description = when {
+                    query.isNotBlank() -> "Prueba con otro importe, cuenta o concepto."
+                    reportSelection != null -> "Ya no hay gastos de esta categoría en el mes seleccionado."
+                    else -> "Aún no tienes movimientos de este tipo."
+                }
+                val actionLabel = when {
+                    reportSelection == null && query.isNotBlank() -> "Limpiar búsqueda y filtros"
+                    reportSelection == null -> "Ver todos"
+                    query.isNotBlank() -> "Limpiar búsqueda"
+                    else -> "Volver a Reportes"
+                }
                 HistoryMessage(
                     icon = Icons.Outlined.SearchOff,
                     title = "Sin resultados",
-                    description = if (query.isBlank()) "Aún no tienes movimientos de este tipo."
-                        else "Prueba con otro importe, cuenta o categoría.",
-                    actionLabel = if (query.isBlank()) "Ver todos" else "Limpiar búsqueda y filtros",
-                    onAction = { query = ""; type = null; focus.clearFocus() }
+                    description = description,
+                    actionLabel = actionLabel,
+                    onAction = {
+                        if (reportSelection != null && query.isBlank()) onBackToReport() else {
+                            query = ""
+                            type = null
+                            focus.clearFocus()
+                        }
+                    }
                 )
             }
             else -> grouped.forEach { (day, entries) ->
@@ -169,6 +198,19 @@ internal fun HistoryScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ReportHistoryHeading(category: String, monthLabel: String, onBack: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        FilledTonalIconButton(onClick = onBack, shape = MaterialTheme.shapes.small) {
+            Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Volver a Reportes")
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("Movimientos", Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineSmall)
+            Text("$category · $monthLabel", style = MaterialTheme.typography.bodySmall, color = HomePalette.Muted)
         }
     }
 }
