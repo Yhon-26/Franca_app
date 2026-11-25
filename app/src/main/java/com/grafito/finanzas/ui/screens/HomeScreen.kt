@@ -1,7 +1,5 @@
 package com.grafito.finanzas.ui.screens
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -12,13 +10,10 @@ import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.NorthEast
-import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.SouthWest
 import androidx.compose.material.icons.outlined.StarOutline
-import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -47,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import com.grafito.finanzas.data.*
 import com.grafito.finanzas.model.*
 import com.grafito.finanzas.ui.components.FrancaBrand
+import com.grafito.finanzas.ui.components.MovementRow
 import com.grafito.finanzas.ui.components.SectionTitle
 import com.grafito.finanzas.ui.components.categoryIcon
 import com.grafito.finanzas.ui.theme.HomePalette
@@ -64,7 +60,7 @@ internal fun HomeScreen(
     modifier: Modifier = Modifier,
     onReviewYape: (String) -> Unit,
     onNewFavorite: () -> Unit,
-    onSeeAll: (() -> Unit)?,
+    onSeeAll: () -> Unit,
     onSelect: (TransactionEntity) -> Unit,
     onFavorite: (FavoriteEntity) -> Unit
 ) {
@@ -136,7 +132,7 @@ internal fun HomeScreen(
                 val now = System.currentTimeMillis()
                 recent.forEachIndexed { index, entry ->
                     key(entry.id) {
-                        RecentMovement(entry, categories[entry.categoryId], accounts, now,
+                        MovementRow(entry, categories[entry.categoryId], accounts, homeDate(entry.occurredAt, now),
                             highlighted = highlightedEntryId == entry.id) { onSelect(entry) }
                     }
                     if (index != recent.lastIndex) HorizontalDivider(Modifier.padding(start = 52.dp), color = HomePalette.Line)
@@ -295,42 +291,6 @@ private fun FavoriteRow(favorite: FavoriteEntity, account: AccountEntity?, categ
                     tint = Color.White, modifier = Modifier.size(21.dp))
             }
         }
-    }
-}
-
-@Composable
-private fun RecentMovement(entry: TransactionEntity, category: CategoryEntity?, accounts: Map<Long, AccountEntity>,
-                           now: Long, highlighted: Boolean, onClick: () -> Unit) {
-    val account = accounts[entry.accountId]?.name.orEmpty()
-    val destination = accounts[entry.toAccountId]?.name.orEmpty()
-    val (sign, amountColor, defaultIcon) = when (entry.type) {
-        EntryType.INCOME -> Triple("+", HomePalette.Income, Icons.Outlined.Payments)
-        EntryType.TRANSFER -> Triple("", HomePalette.Ink, Icons.Outlined.SwapHoriz)
-        else -> Triple("−", HomePalette.Expense, Icons.AutoMirrored.Outlined.ReceiptLong)
-    }
-    val title = when (entry.type) {
-        EntryType.TRANSFER -> "Transferencia"
-        EntryType.INCOME -> entry.note.ifBlank { category?.name ?: "Ingreso" }
-        else -> entry.note.ifBlank { category?.name ?: "Gasto sin categoría" }
-    }
-    val accountLabel = if (entry.type == EntryType.TRANSFER) "$account → $destination" else account
-    val date = homeDate(entry.occurredAt, now)
-    val highlight by animateColorAsState(
-        if (highlighted) HomePalette.IconBackground else Color.Transparent,
-        animationSpec = tween(220), label = "Movimiento destacado"
-    )
-    Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).clip(MaterialTheme.shapes.small)
-        .background(highlight).clickable(role = Role.Button, onClick = onClick).padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        HomeIcon(category?.let(::categoryIcon) ?: defaultIcon, Modifier.size(40.dp), 20.dp)
-        Column(Modifier.weight(1.3f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
-                maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(listOf(accountLabel, date).filter(String::isNotBlank).joinToString(" · "), color = HomePalette.Muted,
-                style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        }
-        Text(sign + Money.format(entry.amountCents), Modifier.weight(1f), color = amountColor, textAlign = TextAlign.End,
-            style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"))
     }
 }
 

@@ -29,6 +29,8 @@ import org.junit.Assert.*
 import org.junit.rules.ExternalResource
 import org.junit.rules.RuleChain
 import java.io.File
+import java.time.LocalDate
+import java.time.ZoneId
 
 /** Runs only in the separate .validation application; never clears the user's debug installation. */
 class FinanceUiTest {
@@ -315,11 +317,7 @@ class FinanceUiTest {
         assertTrue(runBlocking { repository.snapshot().transactions.isEmpty() })
     }
 
-    @Test fun sameDeskScenePlaysInMovementsAndReportsAndPausesInBackground() {
-        compose.onNodeWithContentDescription("Historial").performClick()
-        compose.onNodeWithText("Movimientos").assertIsDisplayed()
-        assertDeskSceneAdvances()
-
+    @Test fun reportDeskScenePlaysAndPausesInBackground() {
         compose.onNodeWithContentDescription("Reportes").performClick()
         val bounds = assertDeskSceneAdvances()
         compose.activityRule.scenario.moveToState(Lifecycle.State.STARTED)
@@ -332,6 +330,73 @@ class FinanceUiTest {
 
         compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
         compose.waitUntil(10_000) { !pausedAt.contentEquals(deskPixels(bounds)) }
+    }
+
+    @Test fun historyOpensFromHomeAndFindsMovementsByAmountAccountAndCategory() {
+        compose.onNodeWithText("Ver todos").performScrollTo().performClick()
+        compose.onNodeWithText("Movimientos").assertIsDisplayed()
+        compose.onNodeWithText("Aún no tienes movimientos").assertIsDisplayed()
+        compose.onNodeWithText("Registrar movimiento").performClick()
+        compose.onNodeWithText("Registrar").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Cerrar registro").performClick()
+
+        val zone = ZoneId.systemDefault()
+        val today = System.currentTimeMillis()
+        val yesterday = LocalDate.now(zone).minusDays(1).atTime(16, 30).atZone(zone).toInstant().toEpochMilli()
+        runBlocking {
+            val original = repository.snapshot()
+            repository.restore(original.copy(transactions = listOf(
+                TransactionEntity(1, EntryType.EXPENSE, 1250, 1, categoryId = 1, note = "Pasaje al trabajo", occurredAt = today),
+                TransactionEntity(2, EntryType.INCOME, 11250, 2, categoryId = 2, note = "Yape recibido", occurredAt = today - 60_000),
+                TransactionEntity(3, EntryType.TRANSFER, 3000, 2, toAccountId = 1, note = "Para gastos", occurredAt = yesterday),
+                TransactionEntity(4, EntryType.EXPENSE, 4760, 1, note = "Mercado", occurredAt = yesterday - 60_000)
+            )))
+        }
+        val expense = compose.onNodeWithText("Pasaje al trabajo")
+        val income = compose.onNodeWithText("Yape recibido")
+        val transfer = compose.onNodeWithText("Transferencia")
+        compose.waitUntil(10_000) { expense.isDisplayed() && transfer.isDisplayed() }
+        compose.onNodeWithText("Hoy ·", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Ayer ·", substring = true).assertIsDisplayed()
+        val screenshot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        try {
+            File(compose.activity.getExternalFilesDir(null), "franca-movimientos.png").outputStream().use {
+                screenshot.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+        } finally {
+            screenshot.recycle()
+        }
+
+        val search = compose.onNodeWithText("Buscar movimiento")
+        search.performTextInput("12,50")
+        search.performImeAction()
+        compose.waitUntil(10_000) { expense.isDisplayed() && !income.isDisplayed() }
+        expense.performClick()
+        compose.onNodeWithText("Editar movimiento").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Cerrar registro").performClick()
+
+        search.performTextReplacement("Transporte")
+        search.performImeAction()
+        compose.waitUntil(10_000) { expense.isDisplayed() && !transfer.isDisplayed() }
+        search.performTextReplacement("Yape")
+        search.performImeAction()
+        compose.waitUntil(10_000) { income.isDisplayed() && transfer.isDisplayed() && !expense.isDisplayed() }
+        compose.onNodeWithText("Transferencias").performClick().assertIsSelected()
+        compose.waitUntil(10_000) { transfer.isDisplayed() && !income.isDisplayed() }
+        compose.activityRule.scenario.recreate()
+        search.assertTextContains("Yape")
+        compose.onNodeWithText("Transferencias").assertIsSelected()
+        compose.waitUntil(10_000) { transfer.isDisplayed() }
+        transfer.performClick()
+        compose.onNodeWithText("Desde").assertIsDisplayed()
+        compose.onNodeWithText("Cerrar").performClick()
+
+        search.performTextReplacement("sin coincidencias")
+        search.performImeAction()
+        compose.waitUntil(10_000) { compose.onNodeWithText("Sin resultados").isDisplayed() }
+        compose.onNodeWithText("Limpiar búsqueda y filtros").performClick()
+        compose.onNodeWithText("Todos").assertIsSelected()
+        compose.waitUntil(10_000) { expense.isDisplayed() && income.isDisplayed() }
     }
 
     private fun assertDeskSceneAdvances(): Rect {
