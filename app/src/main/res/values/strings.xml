@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Franca</string>
+    <string name="yape_notification_source" translatable="false">com.bcp.innovacxion.yapeapp</string>
+    <string name="yape_sent_service_label">Franca · Yape enviado</string>
+    <string name="yape_sent_service_description">Lee la confirmación de Yape en este teléfono para proponer un gasto o transferencia. Guarda el monto y un identificador de la operación. Cada movimiento se registra al confirmar en Franca.</string>
+    <string name="bcp_screen_source" translatable="false">com.bcp.bank.bcp</string>
+    <string name="bcp_screen_service_label">Franca · Pagos BCP</string>
+    <string name="bcp_screen_service_description">Lee los comprobantes de pagos enviados que Android permita consultar en Banca Móvil BCP. Prepara un aviso para que revises el monto, la cuenta y la categoría. Cada movimiento se guarda cuando lo confirmas en Franca.</string>
+    <string name="brand_tagline">Cuentas claras, hogar firme</string>
+</resources>
