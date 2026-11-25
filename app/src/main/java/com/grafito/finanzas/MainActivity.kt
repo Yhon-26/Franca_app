@@ -38,6 +38,7 @@ import com.grafito.finanzas.ui.components.FirstMovementFeedback
 import com.grafito.finanzas.ui.components.MovementFeedbackHost
 import com.grafito.finanzas.ui.components.LocalFrancaSounds
 import com.grafito.finanzas.ui.components.ProvideFrancaSounds
+import com.grafito.finanzas.ui.components.TransferDetailDialog
 import com.grafito.finanzas.ui.components.movementSavedMessage
 import com.grafito.finanzas.ui.components.rememberDeskMascotScene
 import com.grafito.finanzas.ui.theme.GrafitoTheme
@@ -313,26 +314,21 @@ private fun MainApp(vm: FinanceViewModel, window: Window, deskScene: DeskMascotS
     }
 
     transferSelected?.let { entry ->
-        AlertDialog(
-            onDismissRequest = { transferId = null },
-            title = { Text("Transferencia") },
-            text = {
-                val from = data.accounts.find { it.id == entry.accountId }?.name ?: "Cuenta de origen"
-                val to = data.accounts.find { it.id == entry.toAccountId }?.name ?: "Cuenta de destino"
-                Text("$from → $to\n${Money.format(entry.amountCents)}\n${entry.note}")
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    transferId = null
-                    scope.launch {
-                        if (!vm.deleteEntry(entry)) return@launch
-                        val generation = vm.dataGeneration.value
-                        val result = snackbars.showSnackbar("Transferencia eliminada", actionLabel = "Deshacer")
-                        if (result == SnackbarResult.ActionPerformed && generation == vm.dataGeneration.value) vm.restoreEntry(entry)
-                    }
-                }) { Text("Eliminar transferencia", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = { TextButton(onClick = { transferId = null }) { Text("Cerrar") } }
+        TransferDetailDialog(
+            amountCents = entry.amountCents,
+            from = data.accounts.find { it.id == entry.accountId }?.name ?: "Cuenta de origen",
+            to = data.accounts.find { it.id == entry.toAccountId }?.name ?: "Cuenta de destino",
+            note = entry.note,
+            onClose = { transferId = null },
+            onDelete = {
+                transferId = null
+                scope.launch {
+                    if (!vm.deleteEntry(entry)) return@launch
+                    val generation = vm.dataGeneration.value
+                    val result = snackbars.showSnackbar("Transferencia eliminada", actionLabel = "Deshacer")
+                    if (result == SnackbarResult.ActionPerformed && generation == vm.dataGeneration.value) vm.restoreEntry(entry)
+                }
+            }
         )
     }
 

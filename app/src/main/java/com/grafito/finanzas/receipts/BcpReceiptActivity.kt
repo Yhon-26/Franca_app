@@ -8,10 +8,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -19,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -33,12 +37,11 @@ import com.grafito.finanzas.data.ReceiptSaveResult
 import com.grafito.finanzas.model.Money
 import com.grafito.finanzas.ui.components.CategorySelector
 import com.grafito.finanzas.ui.components.FrancaCue
-import com.grafito.finanzas.ui.components.GraphiteCard
 import com.grafito.finanzas.ui.components.LocalFrancaSounds
 import com.grafito.finanzas.ui.components.ProvideFrancaSounds
 import com.grafito.finanzas.ui.components.ScreenTitle
 import com.grafito.finanzas.ui.theme.GrafitoTheme
-import com.grafito.finanzas.ui.theme.Graphite
+import com.grafito.finanzas.ui.theme.HomePalette
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -52,6 +55,7 @@ open class BcpReceiptActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = true
         model.receive(intent, gmailReview)
         setContent {
             ProvideFrancaSounds {
@@ -68,8 +72,8 @@ open class BcpReceiptActivity : ComponentActivity() {
                     }
                     if (state == ReceiptReview.Dismissed) finish()
                 }
-                GrafitoTheme {
-                    Scaffold { padding ->
+                GrafitoTheme(colorScheme = HomePalette.panelScheme) {
+                    Scaffold(containerColor = HomePalette.Background, contentColor = HomePalette.Navy) { padding ->
                         Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding(), contentAlignment = Alignment.TopCenter) {
                             Column(Modifier.widthIn(max = 620.dp).fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
                                 verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -221,21 +225,26 @@ private fun ReceiptForm(review: ReceiptReview.Ready, accounts: List<AccountEntit
     val cents = Money.parse(amount)
     val from = accounts.find { it.id == fromId }
     val to = accounts.find { it.id == toId && it.id != fromId }
-    Text("Comprueba el monto y elige cómo registrarlo.", color = Graphite.Muted, style = MaterialTheme.typography.bodySmall)
+    Text("Comprueba el monto y elige cómo registrarlo.", color = HomePalette.Muted, style = MaterialTheme.typography.bodySmall)
     if (review.mail == null && review.receipt.operationFingerprint == null) {
         Text("Para detectar duplicados de Gmail hacen falta la fecha y el número de operación BCP. Revisa el historial antes de guardar.",
             style = MaterialTheme.typography.bodySmall)
     }
-    GraphiteCard(Modifier.fillMaxWidth()) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.outlinedCardColors(containerColor = HomePalette.Paper, contentColor = HomePalette.Navy),
+        border = BorderStroke(1.dp, HomePalette.Line)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (review.receipt.suggestedCents == null) {
-                Text("Escribe el importe en soles.", style = MaterialTheme.typography.bodySmall, color = Graphite.Muted)
+                Text("Escribe el importe en soles.", style = MaterialTheme.typography.bodySmall, color = HomePalette.Muted)
             }
             OutlinedTextField(value = amount, onValueChange = { amount = it.take(12) }, modifier = Modifier.fillMaxWidth(),
                 label = { Text("Importe en soles") }, singleLine = true, enabled = !review.saving,
                 shape = MaterialTheme.shapes.medium,
                 textStyle = MaterialTheme.typography.headlineMedium.copy(fontFeatureSettings = "tnum"),
-                prefix = { Text("S/ ", color = Graphite.Muted) },
+                prefix = { Text("S/ ", color = HomePalette.Muted) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = !transfer, onClick = { transfer = false }, enabled = !review.saving, label = { Text("Gasto") })
@@ -260,8 +269,19 @@ private fun ReceiptForm(review: ReceiptReview.Ready, accounts: List<AccountEntit
         modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = MaterialTheme.shapes.medium) {
         Text(if (review.saving) "Guardando…" else if (transfer) "Guardar transferencia" else "Guardar gasto")
     }
-    OutlinedButton(onClick = onClose, enabled = !review.saving, modifier = Modifier.fillMaxWidth()) { Text("Cancelar") }
-    if (review.mail != null) TextButton(onClick = onDiscard, enabled = !review.saving) { Text("Descartar aviso") }
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+    ) {
+        TextButton(onClick = onClose, enabled = !review.saving) { Text("Cancelar") }
+        if (review.mail != null) {
+            TextButton(
+                onClick = onDiscard,
+                enabled = !review.saving,
+                colors = ButtonDefaults.textButtonColors(contentColor = HomePalette.Expense)
+            ) { Text("Descartar aviso") }
+        }
+    }
 }
 
 @Composable
@@ -271,9 +291,10 @@ private fun ReceiptAccountMenu(label: String, selected: AccountEntity?, choices:
     Text(label, style = MaterialTheme.typography.labelLarge)
     Box(Modifier.fillMaxWidth()) {
         OutlinedButton(onClick = { open = true }, enabled = enabled && choices.isNotEmpty(), modifier = Modifier.fillMaxWidth()) {
-            Text(selected?.name ?: "Elegir cuenta")
+            Text(selected?.name ?: "Elegir cuenta", Modifier.weight(1f))
+            Icon(Icons.Outlined.ExpandMore, contentDescription = null)
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = HomePalette.Paper) {
             choices.forEach { account ->
                 DropdownMenuItem(text = { Text(account.name) }, onClick = { onSelect(account); open = false })
             }

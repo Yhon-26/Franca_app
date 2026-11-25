@@ -6,7 +6,7 @@
         <item name="android:navigationBarColor">#0E0E10</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
-    <style name="Theme.Franca.YapeReview" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.Franca.PaymentReview" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/franca_panel_background</item>
         <item name="android:statusBarColor">@color/franca_panel_background</item>
         <item name="android:navigationBarColor">@color/franca_panel_background</item>

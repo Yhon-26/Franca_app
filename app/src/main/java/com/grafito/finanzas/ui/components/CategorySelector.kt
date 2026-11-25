@@ -31,7 +31,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.grafito.finanzas.data.CategoryEntity
 import com.grafito.finanzas.data.categoryNameKey
-import com.grafito.finanzas.ui.theme.Graphite
 import java.text.Collator
 import java.util.Locale
 
@@ -59,7 +58,7 @@ internal fun CategorySelector(
     BackHandler(enabled = expanded && enabled) { collapse() }
 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("Categoría (opcional)", style = MaterialTheme.typography.labelLarge, color = Graphite.Secondary)
+        Text("Categoría (opcional)", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedButton(
             onClick = {
                 if (expanded) collapse()
@@ -74,7 +73,7 @@ internal fun CategorySelector(
                 stateDescription = if (expanded) "Expandida" else "Contraída"
             },
             shape = MaterialTheme.shapes.small,
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Graphite.Primary),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
         ) {
             Icon(current?.let(::categoryIcon) ?: Icons.Outlined.Category, null, Modifier.size(20.dp))

@@ -10,6 +10,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
 import android.os.Build
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.core.content.FileProvider
@@ -22,6 +23,7 @@ import com.grafito.finanzas.receipts.BcpMailAlerts
 import com.grafito.finanzas.receipts.BcpMailParser
 import com.grafito.finanzas.receipts.BcpMailReviewActivity
 import com.grafito.finanzas.receipts.SharedReceiptReader
+import com.grafito.finanzas.ui.theme.HomePalette
 import java.io.File
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -57,6 +59,17 @@ class BcpReceiptTest {
         ActivityScenario.launch<BcpMailReviewActivity>(BcpMailAlerts.reviewIntent(app, payment.id)).use {
             waitForText("Pago BCP detectado")
             waitForText("BCP")
+            val save = compose.onNodeWithText("Guardar gasto").performScrollTo().assertIsEnabled()
+            val pixels = save.captureToImage().toPixelMap()
+            assertEquals(HomePalette.Blue, pixels[pixels.width / 8, pixels.height / 2])
+            val screenshot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+            try {
+                File(app.getExternalFilesDir(null), "franca-revision-bcp.png").outputStream().use {
+                    screenshot.compress(Bitmap.CompressFormat.PNG, 100, it)
+                }
+            } finally {
+                screenshot.recycle()
+            }
             compose.onNodeWithText("Sin categoría").performScrollTo().performClick()
             compose.onNodeWithText("Buscar categoría").performScrollTo().performTextInput("alimentacion")
             compose.onNodeWithText("Alimentación").performScrollTo().performClick()

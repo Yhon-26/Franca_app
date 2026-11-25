@@ -9,6 +9,7 @@ import android.graphics.Color
 import android.net.Uri
 import androidx.datastore.preferences.core.edit
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -20,6 +21,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.grafito.finanzas.data.*
 import com.grafito.finanzas.model.FinanceMath
 import com.grafito.finanzas.model.Money
+import com.grafito.finanzas.ui.theme.HomePalette
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.*
@@ -382,6 +384,34 @@ class FinanceUiTest {
         assertEquals(1250L, transfer.amountCents)
         assertEquals(before.accounts.sumOf { it.openingBalanceCents },
             FinanceMath.accountBalances(after.accounts, after.transactions).values.sum())
+
+        compose.onNodeWithContentDescription("Inicio").performClick()
+        compose.waitUntil(6_000) { !compose.onNodeWithText("Transferencia registrada").isDisplayed() }
+        compose.onNodeWithText("Transferencia").performClick()
+        compose.onNodeWithText("Desde").assertIsDisplayed()
+        compose.onNodeWithText("Hacia").assertIsDisplayed()
+        compose.onNodeWithText("BCP").assertIsDisplayed()
+        compose.onNodeWithText("Efectivo").assertIsDisplayed()
+        val close = compose.onNodeWithText("Cerrar")
+        val closePixels = close.captureToImage().toPixelMap()
+        assertEquals(HomePalette.Blue, closePixels[closePixels.width / 5, closePixels.height / 2])
+        val screenshot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        try {
+            File(compose.activity.getExternalFilesDir(null), "franca-detalle-transferencia.png").outputStream().use {
+                screenshot.compress(Bitmap.CompressFormat.PNG, 100, it)
+            }
+        } finally {
+            screenshot.recycle()
+        }
+        close.performClick()
+        compose.onNode(isDialog()).assertDoesNotExist()
+        compose.onNodeWithText("Transferencia").performClick()
+        compose.onNodeWithContentDescription("Eliminar transferencia").performClick()
+        compose.waitUntil(10_000) { runBlocking { repository.snapshot().transactions.isEmpty() } }
+        compose.onNodeWithText("Deshacer").performClick()
+        compose.waitUntil(10_000) { runBlocking { repository.snapshot().transactions.size == 1 } }
+        compose.onNodeWithContentDescription("Cuentas").performClick()
+
         compose.onNodeWithContentDescription("Opciones de Yape").performScrollTo().performClick()
         compose.onNodeWithText("Eliminar cuenta").performClick()
         compose.onNodeWithText("Eliminar Yape").assertIsDisplayed()
