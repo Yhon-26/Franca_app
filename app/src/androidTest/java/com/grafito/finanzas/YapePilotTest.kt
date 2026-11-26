@@ -220,6 +220,10 @@ class YapePilotTest {
             .setSmallIcon(android.R.drawable.stat_notify_more)
             .setContentTitle("Confirmación de pago").setContentText("Persona de prueba te envió un pago por S/12,50.").build())
         val pending = runBlocking { withTimeout(15_000) { db.yapeSuggestions().pending().first { it.isNotEmpty() } } }
+        val lastRead = runBlocking { withTimeout(10_000) { prefs.yapeCapture.first { it.lastStatus == "detected" } } }
+        assertEquals(pending.single().receivedAt, lastRead.lastIncomeReadAt)
+        runBlocking { prefs.reportYapeStatus(lastRead.enabledSince, "unrecognized", pending.single().receivedAt + 1) }
+        assertEquals(lastRead.lastIncomeReadAt, runBlocking { prefs.yapeCapture.first().lastIncomeReadAt })
         assertEquals(1250L, pending.single().amountCents)
         assertTrue(runBlocking { db.dao().allTransactions().isEmpty() })
     }

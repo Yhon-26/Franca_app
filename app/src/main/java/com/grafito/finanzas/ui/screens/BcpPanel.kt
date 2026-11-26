@@ -66,17 +66,18 @@ private fun BcpScreenPanel() {
     }
 
     SettingsCard(Modifier.fillMaxWidth()) {
-        Text("Lee la confirmación de un pago enviado en BCP y prepara el aviso para elegir cómo registrarlo. Esta lectura funciona de forma independiente del correo.",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(10.dp))
-        if (connected) {
-            Text("Servicio de BCP activo", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(4.dp))
-        }
         Text(when {
+            connected -> "Lector BCP activo"
+            enabledInAndroid == true -> "Lector BCP desconectado"
+            enabledInAndroid == false -> "Falta permiso de accesibilidad"
+            else -> "Revisa el permiso de accesibilidad"
+        }, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        ReaderLastRead(connected, report.lastReadAt, "El lector espera la confirmación «¡Operación exitosa!» de tu próximo pago habitual.")
+        if (!connected || report.status != null) Text(when {
             !connected && enabledInAndroid == true ->
-                "Activado en Android. Si el lector sigue desconectado, desactiva «Franca · Pagos BCP» y vuelve a activarlo."
-            !connected -> "Activa «Franca · Pagos BCP» en Accesibilidad de Android."
+                "En Accesibilidad, apaga «Franca · Pagos BCP» y vuelve a encenderlo."
+            !connected -> "Busca «Franca · Pagos BCP» en Accesibilidad de Android."
             else -> when (report.status) {
                 null -> "Esperando la confirmación de un pago enviado en BCP."
                 BcpScreenStatus.VISIBLE -> when {
@@ -103,12 +104,10 @@ private fun BcpScreenPanel() {
         }, style = MaterialTheme.typography.labelLarge,
             color = if (connected && report.status in setOf(BcpScreenStatus.DETECTED, BcpScreenStatus.DUPLICATE))
                 MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedButton(onClick = {
+        if (!connected) OutlinedButton(onClick = {
             try { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
             catch (_: Exception) { error = "Abre Accesibilidad desde los Ajustes de Android." }
-        }) { Text("Abrir Accesibilidad de Android") }
-        Text("Después de tu próximo pago habitual, espera el aviso cuando BCP muestre «¡Operación exitosa!». Toca el aviso para revisar el monto antes de registrarlo.",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }) { Text(if (enabledInAndroid == true) "Restablecer lector" else "Abrir Accesibilidad de Android") }
         if (report.checkedAt > 0) {
             Spacer(Modifier.height(8.dp))
             Text("Última comprobación · ${DateFormat.getDateTimeInstance().format(Date(report.checkedAt))}",

@@ -21,6 +21,16 @@ class UserPreferences(private val context: Context) {
     private val yapeSince = longPreferencesKey("yape_capture_since")
     private val yapeLastStatus = stringPreferencesKey("yape_capture_last_status")
     private val yapeLastTime = longPreferencesKey("yape_capture_last_time")
+    private val incomeReadAt = longPreferencesKey("yape_income_read_at")
+    private val sentReadAt = longPreferencesKey("yape_sent_read_at")
+
+    private fun lastIncomeRead(prefs: Preferences): Long? = prefs[incomeReadAt]
+        ?: prefs[yapeLastTime]?.takeIf { prefs[yapeLastStatus] in setOf("detected", "duplicate") }
+
+    internal suspend fun reportYapeSentRead() {
+        context.financePreferences.edit { it[sentReadAt] = System.currentTimeMillis() }
+    }
+
     val openQuickOnLaunch: Flow<Boolean> = context.financePreferences.data.map { it[openQuickKey] ?: true }
     val interfaceSounds: Flow<Boolean> = context.financePreferences.data.map { it[interfaceSoundsKey] ?: true }
     suspend fun setOpenQuick(value: Boolean) {
@@ -47,12 +57,13 @@ class UserPreferences(private val context: Context) {
     }
 
     val yapeCapture: Flow<YapeCaptureStatus> = context.financePreferences.data.map {
-        YapeCaptureStatus(it[yapeSince] ?: 0, it[yapeLastStatus], it[yapeLastTime])
+        YapeCaptureStatus(it[yapeSince] ?: 0, it[yapeLastStatus], it[yapeLastTime], lastIncomeRead(it), it[sentReadAt])
     }
 
     suspend fun setYapeCapture(enabled: Boolean) {
         context.financePreferences.edit {
             it[yapeSince] = if (enabled) System.currentTimeMillis() else 0L
+            lastIncomeRead(it)?.let { time -> it[incomeReadAt] = time }
             it.remove(yapeLastStatus)
             it.remove(yapeLastTime)
         }
@@ -62,7 +73,14 @@ class UserPreferences(private val context: Context) {
 
     internal suspend fun reportYapeStatus(session: Long, status: String, time: Long) {
         context.financePreferences.edit {
-            if (it[yapeSince] == session && time >= (it[yapeLastTime] ?: 0)) {
+            if (session <= 0 || it[yapeSince] != session) return@edit
+            val previous = lastIncomeRead(it)
+            if (status == "detected" || status == "duplicate") {
+                it[incomeReadAt] = maxOf(previous ?: 0, time)
+            } else if (previous != null) {
+                it[incomeReadAt] = previous
+            }
+            if (time >= (it[yapeLastTime] ?: 0)) {
                 it[yapeLastStatus] = status
                 it[yapeLastTime] = time
             }
@@ -70,4 +88,10 @@ class UserPreferences(private val context: Context) {
     }
 }
 
-data class YapeCaptureStatus(val enabledSince: Long = 0, val lastStatus: String? = null, val lastTime: Long? = null)
+data class YapeCaptureStatus(
+    val enabledSince: Long = 0,
+    val lastStatus: String? = null,
+    val lastTime: Long? = null,
+    val lastIncomeReadAt: Long? = null,
+    val lastSentReadAt: Long? = null
+)

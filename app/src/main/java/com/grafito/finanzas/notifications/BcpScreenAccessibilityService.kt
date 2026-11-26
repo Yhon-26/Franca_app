@@ -106,7 +106,7 @@ class BcpScreenAccessibilityService : AccessibilityService() {
                         }
                         lastPaymentId = payment.id
                         lastStatus = if (recorded) BcpScreenStatus.DETECTED else BcpScreenStatus.DUPLICATE
-                        settings.report(result.copy(status = lastStatus))
+                        settings.report(result.copy(status = lastStatus), validRead = true)
                     } else if (lastStatus !in setOf(BcpScreenStatus.DETECTED, BcpScreenStatus.DUPLICATE, BcpScreenStatus.INCOMPLETE) ||
                         result.status == BcpScreenStatus.INCOMPLETE) {
                         settings.report(result)
