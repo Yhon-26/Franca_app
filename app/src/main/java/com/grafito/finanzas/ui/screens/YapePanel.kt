@@ -202,6 +202,9 @@ internal fun YapePanel(accounts: List<AccountEntity>, categories: List<CategoryE
                 modifier = Modifier.semantics { contentDescription = "Detectar ingresos de Yape" },
                 onCheckedChange = { next -> perform { preferences.setYapeCapture(next) } })
         }
+        ReaderLastRead(enabled && granted && connected, capture.lastIncomeReadAt,
+            "El lector espera el próximo aviso de ingreso de Yape.",
+            Modifier.padding(start = 46.dp, end = 14.dp, bottom = 8.dp))
         if (enabled && (!granted || !connected)) {
             Column(Modifier.padding(start = 46.dp, end = 14.dp, bottom = 6.dp)) {
                 if (granted) {
@@ -225,6 +228,8 @@ internal fun YapePanel(accounts: List<AccountEntity>, categories: List<CategoryE
             openSettings(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
                 "Busca «Accesibilidad» en Ajustes de Android.")
         }
+        ReaderLastRead(sentConnected, capture.lastSentReadAt, "Puedes abrir un comprobante «¡Yapeaste!» en Yape.",
+            Modifier.padding(start = 46.dp, end = 14.dp, bottom = 8.dp))
         if (sentConnection == YapeSentConnection.DISCONNECTED) {
             Text(YAPE_RECONNECT_GUIDE, Modifier.padding(start = 46.dp, end = 14.dp, bottom = 12.dp),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

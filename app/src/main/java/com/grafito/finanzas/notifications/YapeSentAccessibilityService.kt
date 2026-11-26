@@ -8,6 +8,7 @@ import android.view.accessibility.AccessibilityEvent
 import com.grafito.finanzas.R
 import com.grafito.finanzas.BuildConfig
 import com.grafito.finanzas.data.FinanceDatabase
+import com.grafito.finanzas.data.UserPreferences
 import com.grafito.finanzas.data.YapeInbox
 import com.grafito.finanzas.data.YapeSuggestion
 import com.grafito.finanzas.model.YapeSentParser
@@ -71,6 +72,11 @@ class YapeSentAccessibilityService : AccessibilityService() {
                         val recorded = YapeInbox(FinanceDatabase.get(applicationContext)).record(suggestion)
                         if (recorded) YapeAlerts.show(applicationContext, suggestion)
                         lastPaymentId = payment.id
+                        try {
+                            UserPreferences(applicationContext).reportYapeSentRead()
+                        } catch (_: java.io.IOException) {
+                            // The pending receipt is already stored.
+                        }
                         diagnosticsState.value = if (recorded) YapeSentStatus.DETECTED else YapeSentStatus.DUPLICATE
                     }
                 } catch (error: CancellationException) {

@@ -135,6 +135,7 @@ class BcpScreenAccessibilityTest {
                 if (Build.VERSION.SDK_INT >= 28) display(receipt.drop(2), paneTitle = "¡Operación exitosa!")
                 else display(receipt)
                 withTimeout(15_000) { settings.report.first { it.status == BcpScreenStatus.DETECTED } }
+                val lastReadAt = requireNotNull(settings.report.first().lastReadAt)
                 val candidate = requireNotNull(db.bcpMailSuggestions().find(payment.id))
                 assertEquals(1250L, candidate.amountCents)
                 assertEquals(payment.occurredAt, candidate.occurredAt)
@@ -142,6 +143,7 @@ class BcpScreenAccessibilityTest {
                 val eventRead = withTimeout(15_000) {
                     settings.report.first { it.signals and AccessibilityReceiptReader.READ_FROM_EVENT != 0 }
                 }
+                assertEquals(lastReadAt, eventRead.lastReadAt)
                 assertEquals(0, eventRead.signals and AccessibilityReceiptReader.WINDOW_QUERY)
                 val eventSignals = AccessibilityReceiptReader.EVENT_RECEIVED or AccessibilityReceiptReader.TEXT_AVAILABLE or
                     AccessibilityReceiptReader.CONFIRMATION_RECOGNIZED
