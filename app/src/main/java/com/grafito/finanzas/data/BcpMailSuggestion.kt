@@ -39,6 +39,8 @@ internal class BcpMailInbox(private val database: FinanceDatabase) {
     private val dao = database.bcpMailSuggestions()
     private val repository = FinanceRepository(database)
 
+    val pending = dao.pending()
+
     suspend fun findPending(id: String): BcpMailSuggestion? = dao.find(id)
 
     suspend fun record(suggestion: BcpMailSuggestion): Boolean = database.withTransaction {
