@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.grafito.finanzas.data.*
 import com.grafito.finanzas.model.*
+import com.grafito.finanzas.ui.components.francaPageEnter
 import com.grafito.finanzas.ui.components.FrancaBrand
 import com.grafito.finanzas.ui.components.MovementRow
 import com.grafito.finanzas.ui.components.SectionTitle
@@ -71,9 +72,10 @@ internal fun HomeScreen(
     onFavorite: (FavoriteEntity) -> Unit
 ) {
     val homeScroll = rememberScrollState()
+    val page = modifier.francaPageEnter(showYapeInbox, forward = showYapeInbox)
     if (showYapeInbox) {
         BackHandler(enabled = !reviewingYape, onBack = onCloseYapeInbox)
-        YapePendingScreen(pendingYape, modifier, onCloseYapeInbox, onReviewYape)
+        YapePendingScreen(pendingYape, page, onCloseYapeInbox, onReviewYape)
         return
     }
 
@@ -89,7 +91,7 @@ internal fun HomeScreen(
     val categories = remember(data.categories) { data.categories.associateBy { it.id } }
 
     Column(
-        modifier.fillMaxSize().verticalScroll(homeScroll)
+        page.fillMaxSize().verticalScroll(homeScroll)
             .padding(top = 12.dp, bottom = 84.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {

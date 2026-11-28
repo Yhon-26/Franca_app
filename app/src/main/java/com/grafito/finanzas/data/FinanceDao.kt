@@ -22,7 +22,6 @@ interface FinanceDao {
     @Query("SELECT * FROM favorites ORDER BY id DESC") suspend fun allFavorites(): List<FavoriteEntity>
     @Query("SELECT * FROM settings WHERE id = 1") suspend fun currentSettings(): SettingsEntity?
     @Query("SELECT * FROM transactions WHERE id = :id") suspend fun transaction(id: Long): TransactionEntity?
-    @Query("SELECT id FROM transactions ORDER BY id LIMIT 2") suspend fun firstTransactionIds(): List<Long>
     @Query("""
         SELECT EXISTS(SELECT 1 FROM transactions
         WHERE receiptFingerprint IN (:fingerprint, :operationFingerprint)

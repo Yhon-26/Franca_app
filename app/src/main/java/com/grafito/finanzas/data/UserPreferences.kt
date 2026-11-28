@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 internal val Context.financePreferences by preferencesDataStore(name = "grafito_preferences")
-internal val firstMovementReactionKey = booleanPreferencesKey("first_movement_reaction")
 internal val yapeReadyReactionKey = booleanPreferencesKey("yape_ready_reaction")
 
 class UserPreferences(private val context: Context) {
@@ -41,15 +40,11 @@ class UserPreferences(private val context: Context) {
         context.financePreferences.edit { it[interfaceSoundsKey] = enabled }
     }
 
-    internal suspend fun claimFirstMovementReaction(): Boolean = claimReaction(firstMovementReactionKey)
-
-    internal suspend fun claimYapeReadyReaction(): Boolean = claimReaction(yapeReadyReactionKey)
-
-    private suspend fun claimReaction(key: Preferences.Key<Boolean>): Boolean {
+    internal suspend fun claimYapeReadyReaction(): Boolean {
         var claimed = false
         context.financePreferences.edit {
-            if (it[key] != true) {
-                it[key] = true
+            if (it[yapeReadyReactionKey] != true) {
+                it[yapeReadyReactionKey] = true
                 claimed = true
             }
         }

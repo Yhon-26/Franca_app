@@ -68,9 +68,9 @@ import com.grafito.finanzas.notifications.YapeAlerts
 import com.grafito.finanzas.notifications.FrancaNotices
 import com.grafito.finanzas.notifications.YapeNotificationListener
 import com.grafito.finanzas.notifications.YapeSentAccessibilityService
+import com.grafito.finanzas.ui.components.francaPageEnter
 import com.grafito.finanzas.ui.components.FrancaCue
 import com.grafito.finanzas.ui.components.LocalFrancaSounds
-import com.grafito.finanzas.ui.components.MascotGreeting
 import com.grafito.finanzas.ui.components.movementSavedMessage
 import com.grafito.finanzas.ui.theme.GrafitoTheme
 import com.grafito.finanzas.ui.theme.HomePalette
@@ -242,13 +242,12 @@ internal fun YapePanel(accounts: List<AccountEntity>, categories: List<CategoryE
             shape = MaterialTheme.shapes.medium,
             border = BorderStroke(1.dp, HomePalette.Line)
         ) {
-            Row(Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+            Row(Modifier.heightIn(min = 48.dp).padding(horizontal = 14.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                MascotGreeting(Modifier.size(48.dp))
+                Icon(Icons.Outlined.CheckCircleOutline, contentDescription = null,
+                    tint = HomePalette.Income, modifier = Modifier.size(24.dp))
                 Text("Yape está listo", Modifier.weight(1f), color = HomePalette.Navy,
                     style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                Icon(Icons.Outlined.CheckCircleOutline, contentDescription = null,
-                    tint = HomePalette.Income, modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -521,15 +520,17 @@ internal fun YapeForm(candidate: YapeSuggestion, accounts: List<AccountEntity>, 
                 RegisterPaymentAccountField(mainField, account, !busy && accounts.isNotEmpty()) {
                     openAccountPicker(mainField)
                 }
-                if (transfer) {
-                    RegisterPaymentAccountField(otherField, otherAccount, !busy && accounts.any { it.id != accountId }) {
-                        openAccountPicker(otherField)
-                    }
-                } else {
-                    RegisterCategoryField(selectedCategory, enabled = !busy) {
-                        focus.clearFocus()
-                        keyboard?.hide()
-                        showCategories = true
+                Column(Modifier.fillMaxWidth().francaPageEnter(transfer, forward = transfer)) {
+                    if (transfer) {
+                        RegisterPaymentAccountField(otherField, otherAccount, !busy && accounts.any { it.id != accountId }) {
+                            openAccountPicker(otherField)
+                        }
+                    } else {
+                        RegisterCategoryField(selectedCategory, enabled = !busy) {
+                            focus.clearFocus()
+                            keyboard?.hide()
+                            showCategories = true
+                        }
                     }
                 }
             }
