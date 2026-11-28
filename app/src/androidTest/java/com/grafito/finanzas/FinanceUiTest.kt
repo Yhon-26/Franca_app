@@ -1,16 +1,14 @@
 package com.grafito.finanzas
 
+import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.Application
 import android.app.Instrumentation.ActivityResult
 import android.content.Intent
 import android.graphics.Bitmap
-import android.graphics.Color
 import android.net.Uri
-import androidx.datastore.preferences.core.edit
 import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
@@ -18,7 +16,6 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.espresso.intent.Intents
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasAction
-import androidx.lifecycle.Lifecycle
 import androidx.test.platform.app.InstrumentationRegistry
 import com.grafito.finanzas.data.*
 import com.grafito.finanzas.model.FinanceMath
@@ -77,51 +74,38 @@ class FinanceUiTest {
         }
     }
 
-    @Test fun firstMovementMascotLeavesUndoAvailableAndDoesNotReplay() {
+    @Test fun savedMovementShowsDismissibleFeedbackAndCanBeUndone() {
         val app = ApplicationProvider.getApplicationContext<Application>()
-        check(app.packageName.endsWith(".validation"))
-        runBlocking { app.financePreferences.edit { it.remove(firstMovementReactionKey) } }
-        try {
-            fun saveExpense() {
-                compose.onNodeWithContentDescription("Registrar movimiento").performClick()
-                compose.onNodeWithContentDescription("Monto").performTextInput("1.50")
-                compose.onNodeWithText("Guardar gasto").performClick()
-            }
-
-            saveExpense()
-            val mascot = compose.onNodeWithTag("first_movement_mascot")
-            compose.waitUntil(5_000) { mascot.isDisplayed() }
-            compose.onNodeWithText("Gasto guardado").assertIsDisplayed()
-            compose.onNodeWithText("Deshacer").assertIsDisplayed()
-            compose.waitUntil(5_000) { !mascot.isDisplayed() }
-            compose.onNodeWithText("Deshacer").assertIsDisplayed().performClick()
-            compose.waitUntil(10_000) { runBlocking { repository.snapshot().transactions.isEmpty() } }
-
-            saveExpense()
-            val savedNotice = compose.onNodeWithText("Gasto guardado")
-            compose.waitUntil(10_000) {
-                savedNotice.isDisplayed()
-            }
-            compose.onNodeWithText("Deshacer").assertIsDisplayed()
-            compose.onNodeWithContentDescription("Cerrar aviso").assertIsDisplayed()
-            mascot.assertDoesNotExist()
-            assertTrue(savedNotice.fetchSemanticsNode().boundsInWindow.bottom <
-                compose.onNodeWithText("Saldo total").fetchSemanticsNode().boundsInWindow.top)
-            InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()?.let { image ->
-                try {
-                    File(app.getExternalFilesDir(null), "franca-aviso-guardado.png").outputStream().use {
-                        image.compress(Bitmap.CompressFormat.PNG, 100, it)
-                    }
-                } finally {
-                    image.recycle()
-                }
-            }
-            compose.waitUntil(6_000) { !savedNotice.isDisplayed() }
-            compose.onNodeWithContentDescription("Cerrar aviso").assertDoesNotExist()
-            assertEquals(1, runBlocking { repository.snapshot().transactions.size })
-        } finally {
-            runBlocking { app.financePreferences.edit { it.remove(firstMovementReactionKey) } }
+        fun saveExpense() {
+            compose.onNodeWithContentDescription("Registrar movimiento").performClick()
+            compose.onNodeWithContentDescription("Monto").performTextInput("1.50")
+            compose.onNodeWithText("Guardar gasto").performClick()
         }
+
+        saveExpense()
+        val notice = compose.onNodeWithText("Gasto guardado")
+        compose.waitUntil(10_000) { notice.isDisplayed() }
+        compose.onNodeWithText("Deshacer").assertIsDisplayed().performClick()
+        compose.waitUntil(10_000) { runBlocking { repository.snapshot().transactions.isEmpty() } }
+
+        saveExpense()
+        compose.waitUntil(10_000) { notice.isDisplayed() }
+        compose.onNodeWithText("Deshacer").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Cerrar aviso").assertIsDisplayed()
+        assertTrue(notice.fetchSemanticsNode().boundsInWindow.bottom <
+            compose.onNodeWithText("Saldo total").fetchSemanticsNode().boundsInWindow.top)
+        InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()?.let { image ->
+            try {
+                File(app.getExternalFilesDir(null), "franca-aviso-guardado.png").outputStream().use {
+                    image.compress(Bitmap.CompressFormat.PNG, 100, it)
+                }
+            } finally {
+                image.recycle()
+            }
+        }
+        compose.waitUntil(6_000) { !notice.isDisplayed() }
+        compose.onNodeWithContentDescription("Cerrar aviso").assertDoesNotExist()
+        assertEquals(1, runBlocking { repository.snapshot().transactions.size })
     }
 
     @Test fun amountOnlyUsesDefaultAccountAndUndoRestoresBalance() {
@@ -325,20 +309,28 @@ class FinanceUiTest {
         assertTrue(runBlocking { repository.snapshot().transactions.isEmpty() })
     }
 
-    @Test fun reportDeskScenePlaysAndPausesInBackground() {
-        compose.onNodeWithContentDescription("Reportes").performClick()
-        val bounds = assertDeskSceneAdvances()
-        compose.onNodeWithText("Sin gastos en este mes").assertIsDisplayed()
-        compose.activityRule.scenario.moveToState(Lifecycle.State.STARTED)
+    @Test fun reportsTransitionHonorsMotionSettingAndShowsTheEmptyState() {
+        val heading = compose.onNode(hasText("Reportes") and SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading))
         compose.waitForIdle()
-        // Wait for the display to present the last frame that was queued before the pause.
-        Thread.sleep(120)
-        val pausedAt = deskPixels(bounds)
-        Thread.sleep(350)
-        assertArrayEquals(pausedAt, deskPixels(bounds))
-
-        compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
-        compose.waitUntil(10_000) { !pausedAt.contentEquals(deskPixels(bounds)) }
+        compose.mainClock.autoAdvance = false
+        try {
+            compose.onNodeWithContentDescription("Reportes").performClick()
+            compose.mainClock.advanceTimeByFrame()
+            compose.mainClock.advanceTimeByFrame()
+            val enteringTop = heading.fetchSemanticsNode().boundsInWindow.top
+            compose.mainClock.advanceTimeBy(250)
+            val settledTop = heading.fetchSemanticsNode().boundsInWindow.top
+            if (ValueAnimator.areAnimatorsEnabled()) {
+                assertTrue("El título debe moverse hacia su posición final", enteringTop > settledTop + 1f)
+            } else {
+                assertEquals("Con animaciones desactivadas, el título debe aparecer en su destino",
+                    settledTop, enteringTop, 1f)
+            }
+        } finally {
+            compose.mainClock.autoAdvance = true
+        }
+        compose.onNodeWithText("Sin gastos en este mes").assertIsDisplayed()
+        compose.onNodeWithText("Los gastos de este periodo aparecerán aquí por categoría.").assertIsDisplayed()
     }
 
     @Test fun reportsSelectMonthAndShowOnlyExpensesInTheSelectedCategory() {
@@ -553,33 +545,6 @@ class FinanceUiTest {
         compose.onNodeWithText("Fecha").assertIsNotSelected()
         compose.onNodeWithText("Cuenta").assertIsNotSelected()
         compose.onNodeWithText("Todos").assertIsSelected()
-    }
-
-    private fun assertDeskSceneAdvances(): Rect {
-        val scene = compose.onNodeWithContentDescription("Capibara de Franca trabajando frente a su laptop")
-        compose.waitUntil(10_000) { scene.isDisplayed() }
-        val bounds = scene.fetchSemanticsNode().boundsInWindow
-        compose.waitUntil(5_000) {
-            deskPixels(bounds).any { pixel ->
-                Color.red(pixel) > Color.green(pixel) + 28 && Color.green(pixel) > Color.blue(pixel) + 20
-            }
-        }
-        val firstFrame = deskPixels(bounds)
-        compose.waitUntil(5_000) { !firstFrame.contentEquals(deskPixels(bounds)) }
-        return bounds
-    }
-
-    private fun deskPixels(bounds: Rect): IntArray {
-        val screenshot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-        try {
-            return IntArray(20 * 15) { index ->
-                val x = bounds.left + bounds.width * (index % 20 + 1) / 21
-                val y = bounds.top + bounds.height * (index / 20 + 1) / 16
-                screenshot.getPixel(x.toInt(), y.toInt())
-            }
-        } finally {
-            screenshot.recycle()
-        }
     }
 
     @Test fun walletCanCreateTransferAndRemoveAccountsFromTheCardMenu() {

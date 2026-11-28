@@ -89,13 +89,6 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     suspend fun removeFavorite(favorite: FavoriteEntity) = safely(Unit) { repository.removeFavorite(favorite) }
     suspend fun deleteEntry(entry: TransactionEntity): Boolean = safely(false) { repository.deleteEntry(entry); true }
     suspend fun restoreEntry(entry: TransactionEntity): Boolean = safely(false) { repository.restoreEntry(entry); true }
-    internal suspend fun claimFirstMovementReaction(entryId: Long): Boolean = try {
-        dao.firstTransactionIds().singleOrNull() == entryId && preferences.claimFirstMovementReaction()
-    } catch (error: CancellationException) {
-        throw error
-    } catch (_: Exception) {
-        false
-    }
     internal suspend fun expireYapeNotices() = safely(Unit) { yapeInbox.expireOld() }
     internal suspend fun undoYapeConfirmation(confirmation: YapeConfirmation): Boolean = safely(false) {
         val undone = yapeInbox.undoConfirmation(confirmation)

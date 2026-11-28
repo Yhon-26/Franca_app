@@ -40,6 +40,7 @@ import com.grafito.finanzas.data.FinanceDatabase
 import com.grafito.finanzas.data.FinanceRepository
 import com.grafito.finanzas.data.ReceiptSaveResult
 import com.grafito.finanzas.model.Money
+import com.grafito.finanzas.ui.components.francaPageEnter
 import com.grafito.finanzas.ui.components.FrancaCue
 import com.grafito.finanzas.ui.components.LocalFrancaSounds
 import com.grafito.finanzas.ui.components.ProvideFrancaSounds
@@ -299,17 +300,20 @@ private fun ReceiptForm(title: String, review: ReceiptReview.Ready, accounts: Li
                         finishEditing()
                         accountPicker = PaymentAccountField.ORIGIN
                     }
-                    if (transfer) {
-                        RegisterPaymentAccountField(PaymentAccountField.DESTINATION, to,
-                            !review.saving && accounts.any { it.id != fromId }) {
-                            finishEditing()
-                            accountPicker = PaymentAccountField.DESTINATION
-                        }
-                    }
-                    if (review.mail != null && !transfer) {
-                        RegisterCategoryField(selectedCategory, enabled = !review.saving) {
-                            finishEditing()
-                            showCategories = true
+                    if (transfer || review.mail != null) {
+                        Column(Modifier.fillMaxWidth().francaPageEnter(transfer, forward = transfer)) {
+                            if (transfer) {
+                                RegisterPaymentAccountField(PaymentAccountField.DESTINATION, to,
+                                    !review.saving && accounts.any { it.id != fromId }) {
+                                    finishEditing()
+                                    accountPicker = PaymentAccountField.DESTINATION
+                                }
+                            } else {
+                                RegisterCategoryField(selectedCategory, enabled = !review.saving) {
+                                    finishEditing()
+                                    showCategories = true
+                                }
+                            }
                         }
                     }
                     OutlinedTextField(value = note, onValueChange = { note = it.take(160) }, modifier = Modifier.fillMaxWidth(),

@@ -39,10 +39,9 @@ import com.grafito.finanzas.model.Money
 import com.grafito.finanzas.model.MonthlyReport
 import com.grafito.finanzas.model.MonthlyTotals
 import com.grafito.finanzas.model.ReportExpenseSelection
-import com.grafito.finanzas.ui.components.DeskMascotAnimation
 import com.grafito.finanzas.ui.components.ScreenTitle
 import com.grafito.finanzas.ui.components.categoryIcon
-import com.grafito.finanzas.ui.components.rememberDeskMascotScene
+import com.grafito.finanzas.ui.components.francaPageEnter
 import com.grafito.finanzas.ui.theme.HomePalette
 import java.text.NumberFormat
 import java.time.Instant
@@ -80,12 +79,13 @@ internal fun ReportsScreen(
     var categoryId by rememberSaveable { mutableStateOf<Long?>(null) }
     val month = YearMonth.parse(savedMonth)
     val scroll = rememberLazyListState()
+    val page = modifier.francaPageEnter(showMovements, forward = showMovements)
 
     if (showMovements) {
         BackHandler { showMovements = false }
         HistoryScreen(
             data = data,
-            modifier = modifier,
+            modifier = page,
             highlightedEntryId = highlightedEntryId,
             reportSelection = ReportExpenseSelection(month, categoryId),
             onBackToReport = { showMovements = false },
@@ -103,7 +103,7 @@ internal fun ReportsScreen(
         }.value
     }
     LazyColumn(
-        modifier.fillMaxSize(),
+        page.fillMaxSize(),
         state = scroll,
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp)
     ) {
@@ -131,7 +131,7 @@ internal fun ReportsScreen(
                 )
             }
             if (report.expensesByCategory.isEmpty()) {
-                item(key = "empty-expenses") { EmptySpending(showMascot = data.transactions.isEmpty()) }
+                item(key = "empty-expenses") { EmptySpending() }
             }
             items(report.expensesByCategory, key = { it.categoryId ?: "uncategorized" }) { spending ->
                 val category = categories[spending.categoryId]
@@ -307,14 +307,24 @@ private fun CategoryReportRow(name: String, cents: Long, share: Double, icon: Im
 }
 
 @Composable
-private fun EmptySpending(showMascot: Boolean) {
-    Column(Modifier.fillMaxWidth().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("Sin gastos en este mes", style = MaterialTheme.typography.titleSmall, color = HomePalette.Navy)
-        Text("Los gastos de este periodo aparecerán aquí por categoría.",
-            style = MaterialTheme.typography.bodySmall, color = HomePalette.Muted)
-        if (showMascot) {
-            Box(Modifier.align(Alignment.CenterHorizontally).widthIn(max = 206.dp).fillMaxWidth()) {
-                DeskMascotAnimation(rememberDeskMascotScene())
+private fun EmptySpending() {
+    Surface(
+        Modifier.fillMaxWidth().padding(top = 12.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = HomePalette.Paper,
+        border = BorderStroke(1.dp, HomePalette.Line)
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(Modifier.size(38.dp).background(HomePalette.NavSelection, CircleShape),
+                contentAlignment = Alignment.Center) {
+                Icon(Icons.AutoMirrored.Outlined.ReceiptLong, contentDescription = null,
+                    tint = HomePalette.Blue, modifier = Modifier.size(20.dp))
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Sin gastos en este mes", style = MaterialTheme.typography.titleSmall, color = HomePalette.Navy)
+                Text("Los gastos de este periodo aparecerán aquí por categoría.",
+                    style = MaterialTheme.typography.bodySmall, color = HomePalette.Muted)
             }
         }
     }

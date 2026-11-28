@@ -29,11 +29,11 @@ import com.grafito.finanzas.model.*
 import com.grafito.finanzas.notifications.YapeNotificationListener
 import com.grafito.finanzas.notifications.YapeListenerRecovery
 import com.grafito.finanzas.ui.screens.*
+import com.grafito.finanzas.ui.components.francaPageEnter
 import com.grafito.finanzas.ui.components.FloatingNavigationBar
 import com.grafito.finanzas.ui.components.FrancaCue
 import com.grafito.finanzas.ui.components.NavigationDestination
 import com.grafito.finanzas.ui.components.FrancaSplash
-import com.grafito.finanzas.ui.components.FirstMovementFeedback
 import com.grafito.finanzas.ui.components.MovementFeedbackHost
 import com.grafito.finanzas.ui.components.LocalFrancaSounds
 import com.grafito.finanzas.ui.components.ProvideFrancaSounds
@@ -177,12 +177,9 @@ private fun MainApp(vm: FinanceViewModel, window: Window) {
     ) {
         highlightedEntryId = entry.id
         val generation = vm.dataGeneration.value
-        val result = if (isHome && vm.claimFirstMovementReaction(entry.id)) {
-            saveNotices.showSnackbar(FirstMovementFeedback(message))
-        } else {
-            saveNotices.showSnackbar(message, actionLabel = "Deshacer", withDismissAction = true,
-                duration = SnackbarDuration.Short)
-        }
+        val result = saveNotices.showSnackbar(
+            message, actionLabel = "Deshacer", withDismissAction = true, duration = SnackbarDuration.Short
+        )
         if (result == SnackbarResult.ActionPerformed && generation == vm.dataGeneration.value) {
             if (undo() && highlightedEntryId == entry.id) highlightedEntryId = null
         }
@@ -212,9 +209,13 @@ private fun MainApp(vm: FinanceViewModel, window: Window) {
                     FloatingNavigationBar(destinations, currentTab.ordinal) { currentTab = Tab.entries[it] }
                 }
             ) { padding ->
+                val tabTransition = Modifier.francaPageEnter(currentTab)
                 tabStates.SaveableStateProvider(currentTab.name) {
                     MaterialTheme(colorScheme = pageColors) {
-                        Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding), contentAlignment = Alignment.TopCenter) {
+                        Box(
+                            Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).then(tabTransition),
+                            contentAlignment = Alignment.TopCenter
+                        ) {
                             val page = Modifier.widthIn(max = 620.dp)
                             when {
                                 loadError -> Column(page.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center,
@@ -292,7 +293,6 @@ private fun MainApp(vm: FinanceViewModel, window: Window) {
             }
             MovementFeedbackHost(
                 state = saveNotices,
-                showMascotInHome = isHome,
                 modifier = Modifier.align(Alignment.TopCenter)
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
                     .padding(horizontal = 16.dp, vertical = 8.dp)

@@ -35,6 +35,7 @@ import com.grafito.finanzas.data.YapeConfirmation
 import com.grafito.finanzas.model.FinanceState
 import com.grafito.finanzas.model.FinanceViewModel
 import com.grafito.finanzas.model.Money
+import com.grafito.finanzas.ui.components.francaPageEnter
 import com.grafito.finanzas.ui.components.ScreenTitle
 import com.grafito.finanzas.ui.components.FrancaCue
 import com.grafito.finanzas.ui.components.LocalFrancaSounds
@@ -62,7 +63,7 @@ internal fun SettingsScreen(
     val page = selectedPage
     BackHandler(enabled = page != null) { selectedPage = null }
 
-    Column(modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+    Column(modifier.fillMaxSize().francaPageEnter(page, forward = page != null).padding(horizontal = 20.dp)) {
         if (page == null) {
             Box(Modifier.padding(vertical = 18.dp)) { ScreenTitle("Ajustes") }
         } else {
