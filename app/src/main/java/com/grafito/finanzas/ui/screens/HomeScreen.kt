@@ -58,13 +58,14 @@ import java.util.Locale
 @Composable
 internal fun HomeScreen(
     data: FinanceState,
-    pendingYape: List<YapeSuggestion>,
+    pendingYape: PendingYapeState,
     highlightedEntryId: Long?,
     modifier: Modifier = Modifier,
     showYapeInbox: Boolean,
     reviewingYape: Boolean,
     onOpenYapeInbox: () -> Unit,
     onCloseYapeInbox: () -> Unit,
+    onRetryYapeInbox: () -> Unit,
     onReviewYape: (String) -> Unit,
     onNewFavorite: () -> Unit,
     onSeeAll: () -> Unit,
@@ -75,7 +76,7 @@ internal fun HomeScreen(
     val page = modifier.francaPageEnter(showYapeInbox, forward = showYapeInbox)
     if (showYapeInbox) {
         BackHandler(enabled = !reviewingYape, onBack = onCloseYapeInbox)
-        YapePendingScreen(pendingYape, page, onCloseYapeInbox, onReviewYape)
+        YapePendingScreen(pendingYape, page, onCloseYapeInbox, onReviewYape, onRetryYapeInbox)
         return
     }
 
@@ -107,9 +108,13 @@ internal fun HomeScreen(
         Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             BalanceCard(balance, data.accounts.size, incomes, expenses)
             ThreeDotRule(Modifier.fillMaxWidth().height(6.dp))
-            pendingYape.firstOrNull()?.let { latest ->
-                HomePendingYape(latest, pendingYape.size) {
-                    if (pendingYape.size == 1) onReviewYape(latest.id) else onOpenYapeInbox()
+            if (pendingYape == PendingYapeState.Failed) {
+                YapePendingLoadError(onRetryYapeInbox)
+            }
+            val notices = (pendingYape as? PendingYapeState.Available)?.notices.orEmpty()
+            notices.firstOrNull()?.let { latest ->
+                HomePendingYape(latest, notices.size) {
+                    if (notices.size == 1) onReviewYape(latest.id) else onOpenYapeInbox()
                 }
             }
             YapeSentConnectionNotice()

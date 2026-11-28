@@ -136,6 +136,11 @@ class YapePilotTest {
         compose.waitUntil(10_000) { pending.isDisplayed() }
         pending.performClick()
         compose.onNodeWithText("Revisar ingreso de Yape").assertIsDisplayed()
+        compose.onNodeWithText("Monto en soles").performTextReplacement("36.50")
+        compose.activityRule.scenario.recreate()
+        compose.onNodeWithText("Revisar ingreso de Yape").assertIsDisplayed()
+        compose.onNode(hasSetTextAction() and hasText("36.50")).assertIsDisplayed()
+        assertTrue(runBlocking { db.dao().allTransactions().isEmpty() })
         compose.onNodeWithContentDescription("Cerrar revisión").performClick()
         pending.assertIsDisplayed()
     }

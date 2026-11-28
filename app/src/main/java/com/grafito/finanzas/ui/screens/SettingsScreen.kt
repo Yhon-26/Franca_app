@@ -35,6 +35,7 @@ import com.grafito.finanzas.data.YapeConfirmation
 import com.grafito.finanzas.model.FinanceState
 import com.grafito.finanzas.model.FinanceViewModel
 import com.grafito.finanzas.model.Money
+import com.grafito.finanzas.model.YapePaymentsViewModel
 import com.grafito.finanzas.ui.components.francaPageEnter
 import com.grafito.finanzas.ui.components.ScreenTitle
 import com.grafito.finanzas.ui.components.FrancaCue
@@ -56,6 +57,7 @@ internal fun SettingsScreen(
     onDefaultAccountChanged: (Long) -> Unit,
     onFavoriteAccountChanged: (FavoriteEntity, Long) -> Unit,
     backupViewModel: FinanceViewModel,
+    yapePayments: YapePaymentsViewModel,
     onYapeSaved: (YapeConfirmation) -> Unit
 ) {
     var selectedPage by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
@@ -133,7 +135,7 @@ internal fun SettingsScreen(
                             textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    SettingsPage.YAPE -> YapePanel(data.accounts, data.categories, data.defaultAccountId, data.transactions, onYapeSaved)
+                    SettingsPage.YAPE -> YapePanel(data.accounts, data.categories, data.defaultAccountId, data.transactions, yapePayments, onYapeSaved)
                     SettingsPage.BCP -> BcpPanel()
                     SettingsPage.SOUND -> FrancaSoundSettings()
                     SettingsPage.DEFAULT_ACCOUNT -> DefaultAccountSettings(data, onDefaultAccountChanged)

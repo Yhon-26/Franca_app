@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.grafito.finanzas.data.YapeSuggestion
 import com.grafito.finanzas.model.Money
+import com.grafito.finanzas.model.PendingYapeState
 import com.grafito.finanzas.ui.theme.HomePalette
 import java.time.Instant
 import java.time.LocalDate
@@ -34,11 +35,13 @@ private val yapeTime = DateTimeFormatter.ofPattern("HH:mm")
 
 @Composable
 internal fun YapePendingScreen(
-    notices: List<YapeSuggestion>,
+    pending: PendingYapeState,
     modifier: Modifier,
     onBack: () -> Unit,
-    onReview: (String) -> Unit
+    onReview: (String) -> Unit,
+    onRetry: () -> Unit
 ) {
+    val notices = (pending as? PendingYapeState.Available)?.notices.orEmpty()
     val zone = ZoneId.systemDefault()
     val today = LocalDate.now(zone)
     LazyColumn(
@@ -63,7 +66,13 @@ internal fun YapePendingScreen(
                     style = MaterialTheme.typography.headlineSmall, color = HomePalette.Navy)
             }
         }
-        if (notices.isEmpty()) {
+        if (pending == PendingYapeState.Loading) item(key = "loading") {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
+        if (pending == PendingYapeState.Failed) item(key = "error") {
+            YapePendingLoadError(onRetry)
+        }
+        if (pending is PendingYapeState.Available && notices.isEmpty()) {
             item(key = "empty") {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Estás al día", style = MaterialTheme.typography.titleMedium, color = HomePalette.Navy)
@@ -81,6 +90,15 @@ internal fun YapePendingScreen(
             PendingYapeRow(notice, date) { onReview(notice.id) }
             if (index != notices.lastIndex) Spacer(Modifier.height(8.dp))
         }
+    }
+}
+
+@Composable
+internal fun YapePendingLoadError(onRetry: () -> Unit) {
+    SettingsCard {
+        Text("No se pudieron cargar los avisos de Yape.", style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error)
+        TextButton(onClick = onRetry) { Text("Reintentar") }
     }
 }
 
