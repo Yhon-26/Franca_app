@@ -55,16 +55,17 @@ import com.grafito.finanzas.data.AccountEntity
 import com.grafito.finanzas.data.CategoryEntity
 import com.grafito.finanzas.data.EntryType
 import com.grafito.finanzas.data.TransactionEntity
-import com.grafito.finanzas.data.FinanceDatabase
 import com.grafito.finanzas.data.UserPreferences
 import com.grafito.finanzas.data.YapeCaptureStatus
 import com.grafito.finanzas.data.YapeConfirmation
-import com.grafito.finanzas.data.YapeInbox
 import com.grafito.finanzas.data.YapeSuggestion
 import com.grafito.finanzas.model.Money
+import com.grafito.finanzas.model.ActiveYapeReview
+import com.grafito.finanzas.model.PendingYapeState
+import com.grafito.finanzas.model.YapePaymentsViewModel
+import com.grafito.finanzas.model.YapeReviewState
 import com.grafito.finanzas.model.YapeSentStatus
 import com.grafito.finanzas.model.suggestCategory
-import com.grafito.finanzas.notifications.YapeAlerts
 import com.grafito.finanzas.notifications.FrancaNotices
 import com.grafito.finanzas.notifications.YapeNotificationListener
 import com.grafito.finanzas.notifications.YapeSentAccessibilityService
@@ -85,11 +86,10 @@ import java.util.Date
 @Composable
 internal fun YapePanel(accounts: List<AccountEntity>, categories: List<CategoryEntity>,
                        defaultAccountId: Long?, transactions: List<TransactionEntity>,
-                       onSaved: (YapeConfirmation) -> Unit) {
+                       payments: YapePaymentsViewModel, onSaved: (YapeConfirmation) -> Unit) {
     val context = LocalContext.current
     val application = context.applicationContext
     val preferences = remember(application) { UserPreferences(application) }
-    val inbox = remember(application) { YapeInbox(FinanceDatabase.get(application)) }
     val scope = rememberCoroutineScope()
     var message by remember { mutableStateOf<String?>(null) }
     var failed by remember { mutableStateOf(false) }
@@ -101,11 +101,8 @@ internal fun YapePanel(accounts: List<AccountEntity>, categories: List<CategoryE
         message = "No se pudo leer la configuración de Yape."
         emit(YapeCaptureStatus())
     } }.collectAsStateWithLifecycle(YapeCaptureStatus())
-    val pending by remember(inbox) { inbox.pending.catch {
-        failed = true
-        message = "No se pudieron cargar los avisos de Yape."
-        emit(emptyList())
-    } }.collectAsStateWithLifecycle(emptyList())
+    val pendingState by payments.pending.collectAsStateWithLifecycle()
+    val pending = (pendingState as? PendingYapeState.Available)?.notices.orEmpty()
     val connected by YapeNotificationListener.connected.collectAsStateWithLifecycle()
     val sentConnection = rememberYapeSentConnection()
     val sentConnected = sentConnection == YapeSentConnection.CONNECTED
@@ -145,12 +142,6 @@ internal fun YapePanel(accounts: List<AccountEntity>, categories: List<CategoryE
                 message = "No se pudo completar la operación. Vuelve a intentarlo."
             } finally { busy = false }
         }
-    }
-
-    LaunchedEffect(inbox) {
-        try { inbox.expireOld() }
-        catch (error: CancellationException) { throw error }
-        catch (_: Exception) { failed = true; message = "No se pudo actualizar la lista de avisos." }
     }
 
     LaunchedEffect(yapeReady, resumed) {
@@ -274,6 +265,9 @@ internal fun YapePanel(accounts: List<AccountEntity>, categories: List<CategoryE
         Text(it, color = if (failed) MaterialTheme.colorScheme.error else HomePalette.Income,
             style = MaterialTheme.typography.bodySmall, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
     }
+    if (pendingState == PendingYapeState.Failed) {
+        YapePendingLoadError(payments::refreshPending)
+    }
     if (pending.isNotEmpty()) {
         SettingsCard {
             Text("Yapeos por revisar", style = MaterialTheme.typography.titleSmall)
@@ -347,7 +341,7 @@ internal fun YapePanel(accounts: List<AccountEntity>, categories: List<CategoryE
     }
 
     reviewId?.let { id ->
-        ReviewYape(id, accounts, categories, defaultAccountId, transactions, onSaved = { confirmation ->
+        ReviewYape(id, payments, accounts, categories, defaultAccountId, transactions, onSaved = { confirmation ->
             reviewId = null
             onSaved(confirmation)
         }) { result ->
@@ -359,80 +353,65 @@ internal fun YapePanel(accounts: List<AccountEntity>, categories: List<CategoryE
 }
 
 @Composable
-internal fun ReviewYape(id: String, accounts: List<AccountEntity>, categories: List<CategoryEntity>,
-                              defaultAccountId: Long?, transactions: List<TransactionEntity>,
-                              loadError: Boolean = false, onSaved: ((YapeConfirmation) -> Unit)? = null,
-                              onFinish: (String?) -> Unit) = GrafitoTheme(colorScheme = HomePalette.panelScheme) {
-    val application = LocalContext.current.applicationContext
+internal fun ReviewYape(
+    id: String, payments: YapePaymentsViewModel, accounts: List<AccountEntity>, categories: List<CategoryEntity>,
+    defaultAccountId: Long?, transactions: List<TransactionEntity>, loadError: Boolean = false,
+    onSaved: ((YapeConfirmation) -> Unit)? = null, onFinish: (String?) -> Unit
+) = GrafitoTheme(colorScheme = HomePalette.panelScheme) {
     val haptic = LocalHapticFeedback.current
     val playSound = LocalFrancaSounds.current
-    val database = remember(application) { FinanceDatabase.get(application) }
-    val inbox = remember(database) { YapeInbox(database) }
-    val scope = rememberCoroutineScope()
-    var candidate by remember(id) { mutableStateOf<YapeSuggestion?>(null) }
-    var loaded by remember(id) { mutableStateOf(false) }
-    var error by remember(id) { mutableStateOf<String?>(null) }
-    var busy by remember(id) { mutableStateOf(false) }
+    val review by payments.review.collectAsStateWithLifecycle()
+    val current = review?.takeIf { it.id == id } ?: ActiveYapeReview(id, YapeReviewState.Loading)
     LaunchedEffect(id, loadError) {
-        try {
-            if (loadError) error = "No se pudieron cargar tus datos."
-            else {
-                inbox.expireOld()
-                candidate = database.yapeSuggestions().findPending(id)
-            }
-        } catch (exception: CancellationException) {
-            throw exception
-        } catch (_: Exception) {
-            error = "No se pudo abrir el aviso. Vuelve a intentarlo."
-        } finally {
-            loaded = true
-        }
+        if (!loadError) payments.open(id)
     }
 
-    fun <T : Any> complete(operation: suspend () -> T?, onSuccess: (T) -> Unit) {
-        if (busy) return
-        busy = true
-        error = null
-        scope.launch {
-            try {
-                val result = operation()
-                if (result != null) {
-                    YapeAlerts.cancel(application, id)
-                    onSuccess(result)
-                } else error = "Revisa el aviso, las cuentas o la categoría seleccionadas."
-            } catch (exception: CancellationException) {
-                throw exception
-            } catch (_: Exception) {
-                error = "No se pudo completar la operación. Vuelve a intentarlo."
-            } finally {
-                busy = false
-            }
-        }
+    fun close() {
+        if (payments.close(id)) onFinish(null)
     }
 
-    val suggestion = candidate
-    if (suggestion == null) {
-        AlertDialog(
-            onDismissRequest = { onFinish(null) },
-            title = { Text("Aviso de Yape") },
-            text = { if (loaded) Text(error ?: "Este aviso ya no está pendiente.") else CircularProgressIndicator() },
-            confirmButton = { TextButton(onClick = { onFinish(null) }) { Text("Cerrar") } }
-        )
-    } else {
-        val entryType = if (suggestion.outgoing) EntryType.EXPENSE else EntryType.INCOME
-        YapeForm(suggestion, accounts, categories.filter { it.type == entryType }, defaultAccountId, transactions, busy, error,
-            onClose = { if (!busy) onFinish(null) },
-            onDiscard = {
-                complete({ Unit.takeIf { inbox.discard(id) == 1 } }) { onFinish("Aviso descartado.") }
-            },
-            onConfirm = { account, amount, category, other ->
-                complete({ inbox.confirmForReview(id, account, amount, category, other) }) { confirmation ->
-                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                    playSound(FrancaCue.SAVED)
-                    if (onSaved != null) onSaved(confirmation)
-                    else onFinish(movementSavedMessage(confirmation.transaction.type))
-                }
-            })
+    when (val state = current.state) {
+        is YapeReviewState.Saved -> LaunchedEffect(current) {
+            if (payments.consumeResult(current)) {
+                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                playSound(FrancaCue.SAVED)
+                if (onSaved != null) onSaved(state.confirmation)
+                else onFinish(movementSavedMessage(state.confirmation.transaction.type))
+            }
+        }
+        YapeReviewState.Discarded -> LaunchedEffect(current) {
+            if (payments.consumeResult(current)) onFinish("Aviso descartado.")
+        }
+        else -> if (!loadError && state is YapeReviewState.Ready) {
+            val suggestion = state.notice
+            val entryType = if (suggestion.outgoing) EntryType.EXPENSE else EntryType.INCOME
+            YapeForm(suggestion, accounts, categories.filter { it.type == entryType }, defaultAccountId, transactions,
+                state.busy, state.error, onClose = ::close, onDiscard = { payments.discard(id) },
+                onConfirm = { account, amount, category, other -> payments.confirm(id, account, amount, category, other) })
+        } else {
+            AlertDialog(
+                onDismissRequest = ::close,
+                title = { Text("Aviso de Yape") },
+                text = {
+                    when {
+                        loadError -> Text("No se pudieron cargar tus datos.")
+                        state == YapeReviewState.Loading -> CircularProgressIndicator()
+                        state == YapeReviewState.LoadFailed -> Text("No se pudo abrir el aviso. Vuelve a intentarlo.")
+                        else -> Text("Este aviso ya no está pendiente.")
+                    }
+                },
+                confirmButton = {
+                    if (!loadError && state == YapeReviewState.LoadFailed) {
+                        TextButton(onClick = { payments.retry(id) }) { Text("Reintentar") }
+                    } else {
+                        TextButton(onClick = ::close) { Text("Cerrar") }
+                    }
+                },
+                dismissButton = if (!loadError && state == YapeReviewState.LoadFailed) {
+                    { TextButton(onClick = ::close) { Text("Cerrar") } }
+                } else null
+            )
+        }
     }
 }
 

@@ -26,8 +26,6 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val dao = database.dao()
     private val preferences = UserPreferences(application)
     private val repository = FinanceRepository(database)
-    private val yapeInbox = YapeInbox(database)
-    internal val pendingYape = yapeInbox.pending.catch { emit(emptyList()) }
     private val initialized = MutableStateFlow(false)
     private val refresh = MutableStateFlow(0)
     val dataGeneration = MutableStateFlow(0)
@@ -89,12 +87,6 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     suspend fun removeFavorite(favorite: FavoriteEntity) = safely(Unit) { repository.removeFavorite(favorite) }
     suspend fun deleteEntry(entry: TransactionEntity): Boolean = safely(false) { repository.deleteEntry(entry); true }
     suspend fun restoreEntry(entry: TransactionEntity): Boolean = safely(false) { repository.restoreEntry(entry); true }
-    internal suspend fun expireYapeNotices() = safely(Unit) { yapeInbox.expireOld() }
-    internal suspend fun undoYapeConfirmation(confirmation: YapeConfirmation): Boolean = safely(false) {
-        val undone = yapeInbox.undoConfirmation(confirmation)
-        if (!undone) _errors.emit("El movimiento o el aviso cambió. Revisa tus movimientos.")
-        undone
-    }
 
     suspend fun deleteAccount(account: AccountEntity): Boolean {
         return safely(false) { repository.deleteAccount(account) }

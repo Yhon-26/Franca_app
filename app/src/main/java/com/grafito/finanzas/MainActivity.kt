@@ -74,7 +74,10 @@ class MainActivity : ComponentActivity() {
                 GrafitoTheme {
                     val vm: FinanceViewModel = viewModel()
                     var splashFinished by rememberSaveable { mutableStateOf(false) }
-                    if (splashFinished) MainApp(vm, window) else FrancaSplash { splashFinished = true }
+                    if (splashFinished) {
+                        val yape: YapePaymentsViewModel = viewModel(factory = YapePaymentsViewModel.Factory)
+                        MainApp(vm, yape, window)
+                    } else FrancaSplash { splashFinished = true }
                 }
             }
         }
@@ -82,7 +85,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun MainApp(vm: FinanceViewModel, window: Window) {
+private fun MainApp(vm: FinanceViewModel, yape: YapePaymentsViewModel, window: Window) {
     val data by vm.state.collectAsStateWithLifecycle()
     val openQuickOnLaunch by vm.openQuickOnLaunch.collectAsStateWithLifecycle()
     val loadError by vm.loadError.collectAsStateWithLifecycle()
@@ -123,7 +126,7 @@ private fun MainApp(vm: FinanceViewModel, window: Window) {
         }
     }
     if (isHome && data.isLoaded) {
-        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { scope.launch { vm.expireYapeNotices() } }
+        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { yape.refreshPending() }
     }
     val destinations = remember {
         listOf(
@@ -188,7 +191,9 @@ private fun MainApp(vm: FinanceViewModel, window: Window) {
     fun feedbackForYape(confirmation: YapeConfirmation) {
         scope.launch {
             feedbackWithUndo(confirmation.transaction, movementSavedMessage(confirmation.transaction.type)) {
-                vm.undoYapeConfirmation(confirmation)
+                val undone = yape.undo(confirmation)
+                if (!undone) snackbars.showSnackbar("El movimiento o el aviso cambió. Revisa tus movimientos.")
+                undone
             }
         }
     }
@@ -228,7 +233,7 @@ private fun MainApp(vm: FinanceViewModel, window: Window) {
                                 }
                                 else -> when (currentTab) {
                                     Tab.HOME -> {
-                                        val pending by vm.pendingYape.collectAsStateWithLifecycle(emptyList())
+                                        val pending by yape.pending.collectAsStateWithLifecycle()
                                         HomeScreen(
                                             data = data,
                                             pendingYape = pending,
@@ -238,6 +243,7 @@ private fun MainApp(vm: FinanceViewModel, window: Window) {
                                             reviewingYape = yapeReviewId != null,
                                             onOpenYapeInbox = { playSound(FrancaCue.TAP); showYapeInbox = true },
                                             onCloseYapeInbox = { showYapeInbox = false },
+                                            onRetryYapeInbox = yape::refreshPending,
                                             onReviewYape = { playSound(FrancaCue.TAP); yapeReviewId = it },
                                             onNewFavorite = { openCreate(asShortcut = true) },
                                             onSeeAll = { currentTab = Tab.HISTORY },
@@ -283,6 +289,7 @@ private fun MainApp(vm: FinanceViewModel, window: Window) {
                                         onDefaultAccountChanged = vm::updateDefaultAccount,
                                         onFavoriteAccountChanged = vm::updateFavoriteAccount,
                                         backupViewModel = vm,
+                                        yapePayments = yape,
                                         onYapeSaved = ::feedbackForYape
                                     )
                                 }
@@ -301,7 +308,7 @@ private fun MainApp(vm: FinanceViewModel, window: Window) {
     }
 
     yapeReviewId?.takeIf { data.isLoaded || loadError }?.let { id ->
-        ReviewYape(id, data.accounts, data.categories, data.defaultAccountId, data.transactions,
+        ReviewYape(id, yape, data.accounts, data.categories, data.defaultAccountId, data.transactions,
             loadError = loadError, onSaved = { confirmation ->
                 yapeReviewId = null
                 feedbackForYape(confirmation)

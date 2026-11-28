@@ -48,9 +48,20 @@ interface YapeSuggestionDao {
     suspend fun prune(cutoff: Long)
 }
 
-internal class YapeInbox(private val database: FinanceDatabase) {
+internal interface YapeReviewRepository {
+    val pending: Flow<List<YapeSuggestion>>
+    suspend fun findPending(id: String): YapeSuggestion?
+    suspend fun expireOld()
+    suspend fun discard(id: String): Int
+    suspend fun confirmForReview(id: String, yapeAccountId: Long, amountCents: Long,
+                                 categoryId: Long?, otherAccountId: Long?): YapeConfirmation?
+    suspend fun undoConfirmation(confirmation: YapeConfirmation): Boolean
+}
+
+internal class YapeInbox(private val database: FinanceDatabase) : YapeReviewRepository {
     private val suggestions = database.yapeSuggestions()
-    val pending = suggestions.pending()
+    override val pending = suggestions.pending()
+    override suspend fun findPending(id: String) = suggestions.findPending(id)
 
     suspend fun record(suggestion: YapeSuggestion): Boolean = database.withTransaction {
         val cutoff = System.currentTimeMillis() - RETENTION_MILLIS
@@ -60,16 +71,16 @@ internal class YapeInbox(private val database: FinanceDatabase) {
             suggestions.insert(suggestion) != -1L
     }
 
-    suspend fun discard(id: String) = suggestions.dismiss(id)
+    override suspend fun discard(id: String) = suggestions.dismiss(id)
 
-    suspend fun expireOld() = suggestions.prune(System.currentTimeMillis() - RETENTION_MILLIS)
+    override suspend fun expireOld() = suggestions.prune(System.currentTimeMillis() - RETENTION_MILLIS)
 
     suspend fun confirm(id: String, yapeAccountId: Long, amountCents: Long, categoryId: Long? = null,
                         otherAccountId: Long? = null): Boolean =
         confirmForReview(id, yapeAccountId, amountCents, categoryId, otherAccountId) != null
 
-    suspend fun confirmForReview(id: String, yapeAccountId: Long, amountCents: Long, categoryId: Long?,
-                                 otherAccountId: Long?): YapeConfirmation? = database.withTransaction {
+    override suspend fun confirmForReview(id: String, yapeAccountId: Long, amountCents: Long, categoryId: Long?,
+                                         otherAccountId: Long?): YapeConfirmation? = database.withTransaction {
         if (amountCents !in 1..com.grafito.finanzas.model.Money.MAX_CENTS) return@withTransaction null
         val candidate = suggestions.findPending(id) ?: return@withTransaction null
         val dao = database.dao()
@@ -105,7 +116,7 @@ internal class YapeInbox(private val database: FinanceDatabase) {
         YapeConfirmation(candidate, entry.copy(id = dao.insertTransaction(entry)))
     }
 
-    suspend fun undoConfirmation(confirmation: YapeConfirmation): Boolean = database.withTransaction {
+    override suspend fun undoConfirmation(confirmation: YapeConfirmation): Boolean = database.withTransaction {
         val entry = confirmation.transaction
         val original = confirmation.suggestion
         val dao = database.dao()
