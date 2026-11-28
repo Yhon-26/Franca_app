@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -292,7 +293,7 @@ internal fun RegisterSheetHandle() {
 @Composable
 private fun RegisterHeader(title: String, closeLabel: String, onClose: () -> Unit, enabled: Boolean = true) {
     Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, color = HomePalette.Navy)
+        Text(title, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleLarge, color = HomePalette.Navy)
         IconButton(onClick = onClose, enabled = enabled) {
             Box(Modifier.size(38.dp).background(HomePalette.Paper, MaterialTheme.shapes.small),
                 contentAlignment = Alignment.Center) {
@@ -398,6 +399,24 @@ private fun ShortcutDetails(note: String, onNoteChange: (String) -> Unit, expand
     }
 }
 
+internal enum class PaymentAccountField(val label: String, val pickerTitle: String) {
+    ORIGIN("Cuenta de origen", "Elegir cuenta de origen"),
+    DESTINATION("Cuenta de destino", "Elegir cuenta de destino")
+}
+
+@Composable
+internal fun RegisterPaymentAccountField(
+    field: PaymentAccountField, account: AccountEntity?, enabled: Boolean, onClick: () -> Unit
+) {
+    RegisterRow(
+        title = field.label,
+        icon = Icons.Outlined.AccountBalanceWallet,
+        description = account?.name ?: "Elegir cuenta",
+        enabled = enabled,
+        onClick = onClick
+    )
+}
+
 @Composable
 internal fun RegisterCategoryField(category: CategoryEntity?, enabled: Boolean, onClick: () -> Unit) {
     RegisterRow(
@@ -449,11 +468,17 @@ private fun RegisterRow(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RegisterAccountSheet(accounts: List<AccountEntity>, selectedId: Long?, onDismiss: () -> Unit, onSelect: (Long) -> Unit) {
+internal fun RegisterAccountSheet(
+    accounts: List<AccountEntity>,
+    selectedId: Long?,
+    onDismiss: () -> Unit,
+    title: String = "Elegir cuenta",
+    onSelect: (Long) -> Unit
+) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = HomePalette.Background) {
         Column(Modifier.fillMaxWidth()) {
-            RegisterHeader("Elegir cuenta", "Cerrar cuentas", onDismiss)
+            RegisterHeader(title, "Cerrar cuentas", onDismiss)
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp).selectableGroup(),
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)) {

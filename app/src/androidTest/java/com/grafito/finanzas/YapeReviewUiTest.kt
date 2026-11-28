@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.view.inspector.WindowInspector
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.core.view.ViewCompat
@@ -75,23 +77,33 @@ class YapeReviewUiTest {
         }
     }
 
+    private fun accountOption(name: String, substring: Boolean = false) = compose.onNode(
+        hasText(name, substring = substring) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)
+    )
+
     @Test fun yapeNameTakesPriorityOverDefaultIgnoringCase() {
         show(listOf(cash, bank, AccountEntity(3, " yApE ")), defaultId = 2)
-        compose.onNodeWithText("yApE", substring = true).assertIsSelected()
+        compose.onNodeWithText("Cuenta de origen").performScrollTo().performClick()
+        accountOption("yApE", substring = true).assertIsSelected()
+        compose.onNodeWithContentDescription("Cerrar cuentas").performClick()
         compose.onNodeWithText("Guardar gasto").assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals(3L, savedAccount) }
     }
 
     @Test fun defaultAccountAllowsSavingWithoutYapeOrCategory() {
         show(listOf(cash, bank), defaultId = 2)
-        compose.onNodeWithText("BCP").assertIsSelected()
+        compose.onNodeWithText("Cuenta de origen").performScrollTo().performClick()
+        accountOption("BCP").assertIsSelected()
+        compose.onNodeWithContentDescription("Cerrar cuentas").performClick()
         compose.onNodeWithText("Guardar gasto").assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals(2L, savedAccount); assertNull(savedCategory) }
     }
 
     @Test fun singleAccountIsUsedWhenDefaultIsStale() {
         show(listOf(cash), defaultId = 999, outgoing = false)
-        compose.onNodeWithText("Efectivo").assertIsSelected()
+        compose.onNodeWithText("Cuenta de destino").performScrollTo().performClick()
+        accountOption("Efectivo").assertIsSelected()
+        compose.onNodeWithContentDescription("Cerrar cuentas").performClick()
         captureReviewSheet("yape-recibido.png")
         compose.onNodeWithText("Guardar ingreso").assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals(1L, savedAccount) }
@@ -101,7 +113,8 @@ class YapeReviewUiTest {
         show(listOf(cash, bank), error = "No se pudo completar la operación. Vuelve a intentarlo.")
         compose.onNodeWithText("Guardar gasto").assertIsNotEnabled()
         compose.onNodeWithText("Elige una cuenta").assertIsDisplayed()
-        compose.onNodeWithText("BCP").performScrollTo().performClick()
+        compose.onNodeWithText("Cuenta de origen").performScrollTo().performClick()
+        accountOption("BCP").performClick()
         compose.onNodeWithText("Guardar gasto").assertIsEnabled()
         compose.onNodeWithText("Monto en soles").performTextReplacement("0")
         compose.onNodeWithText("Guardar gasto").assertIsNotEnabled()
