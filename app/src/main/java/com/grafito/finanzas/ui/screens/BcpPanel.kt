@@ -20,7 +20,9 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.grafito.finanzas.data.FinanceDatabase
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.grafito.finanzas.model.BcpPendingState
+import com.grafito.finanzas.model.BcpPendingViewModel
 import com.grafito.finanzas.model.Money
 import com.grafito.finanzas.notifications.BcpScreenAccessibilityService
 import com.grafito.finanzas.notifications.AccessibilityReceiptReader
@@ -181,25 +183,34 @@ private fun BcpScreenPanel() {
 }
 
 @Composable
-private fun BcpPendingPanel() {
+internal fun BcpPendingPanel(model: BcpPendingViewModel = viewModel(factory = BcpPendingViewModel.Factory)) {
     val context = LocalContext.current
-    val application = context.applicationContext
-    val pending by remember(application) {
-        FinanceDatabase.get(application).bcpMailSuggestions().pending().catch { emit(emptyList()) }
-    }.collectAsStateWithLifecycle(emptyList())
-    if (pending.isNotEmpty()) {
-        SettingsCard(Modifier.fillMaxWidth()) {
-            Text("Gastos por revisar", style = MaterialTheme.typography.titleSmall)
-            pending.forEach { item ->
-                HorizontalDivider(Modifier.padding(vertical = 6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(Money.format(item.amountCents), color = MaterialTheme.colorScheme.error)
-                        Text(DateFormat.getDateTimeInstance().format(Date(item.occurredAt)),
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    TextButton(onClick = { context.startActivity(BcpMailAlerts.reviewIntent(context, item.id)) }) {
-                        Text("Revisar")
+    val pending by model.pending.collectAsStateWithLifecycle()
+    SettingsCard(Modifier.fillMaxWidth()) {
+        Text("Gastos por revisar", style = MaterialTheme.typography.titleSmall)
+        when (val state = pending) {
+            BcpPendingState.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 10.dp))
+            BcpPendingState.Failed -> {
+                Text("No se pudieron cargar los avisos de BCP.", Modifier.padding(top = 6.dp),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = model::retry) { Text("Reintentar") }
+            }
+            is BcpPendingState.Available -> {
+                if (state.items.isEmpty()) {
+                    Text("Sin gastos pendientes.", Modifier.padding(top = 6.dp),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                state.items.forEach { item ->
+                    HorizontalDivider(Modifier.padding(vertical = 6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(Money.format(item.amountCents), color = MaterialTheme.colorScheme.error)
+                            Text(DateFormat.getDateTimeInstance().format(Date(item.occurredAt)),
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        TextButton(onClick = { context.startActivity(BcpMailAlerts.reviewIntent(context, item.id)) }) {
+                            Text("Revisar")
+                        }
                     }
                 }
             }
