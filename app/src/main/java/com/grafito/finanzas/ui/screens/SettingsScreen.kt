@@ -33,7 +33,6 @@ import com.grafito.finanzas.BuildConfig
 import com.grafito.finanzas.data.FavoriteEntity
 import com.grafito.finanzas.data.YapeConfirmation
 import com.grafito.finanzas.model.FinanceState
-import com.grafito.finanzas.model.FinanceViewModel
 import com.grafito.finanzas.model.Money
 import com.grafito.finanzas.model.YapePaymentsViewModel
 import com.grafito.finanzas.ui.components.francaPageEnter
@@ -56,7 +55,7 @@ internal fun SettingsScreen(
     onRemoveFavorite: (FavoriteEntity) -> Unit,
     onDefaultAccountChanged: (Long) -> Unit,
     onFavoriteAccountChanged: (FavoriteEntity, Long) -> Unit,
-    backupViewModel: FinanceViewModel,
+    onBeforeRestore: () -> Unit,
     yapePayments: YapePaymentsViewModel,
     onYapeSaved: (YapeConfirmation) -> Unit
 ) {
@@ -140,7 +139,7 @@ internal fun SettingsScreen(
                     SettingsPage.SOUND -> FrancaSoundSettings()
                     SettingsPage.DEFAULT_ACCOUNT -> DefaultAccountSettings(data, onDefaultAccountChanged)
                     SettingsPage.FAVORITES -> FavoriteSettings(data, onRemoveFavorite, onFavoriteAccountChanged)
-                    SettingsPage.BACKUP -> BackupPanel(backupViewModel)
+                    SettingsPage.BACKUP -> BackupPanel(onBeforeRestore)
                     SettingsPage.PRIVACY -> SettingsCard(Modifier.fillMaxWidth()) {
                         Text("Datos locales", style = MaterialTheme.typography.titleMedium)
                         Spacer(Modifier.height(6.dp))

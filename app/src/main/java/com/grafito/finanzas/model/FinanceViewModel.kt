@@ -1,15 +1,12 @@
 package com.grafito.finanzas.model
 
 import android.app.Application
-import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.grafito.finanzas.data.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /** Una única fuente de verdad reactiva para las pantallas del MVP. */
 data class FinanceState(
@@ -25,7 +22,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
     private val database = FinanceDatabase.get(application)
     private val dao = database.dao()
     private val preferences = UserPreferences(application)
-    private val repository = FinanceRepository(database)
+    private val repository = database.repository
     private val initialized = MutableStateFlow(false)
     private val refresh = MutableStateFlow(0)
     val dataGeneration = MutableStateFlow(0)
@@ -92,34 +89,7 @@ class FinanceViewModel(application: Application) : AndroidViewModel(application)
         return safely(false) { repository.deleteAccount(account) }
     }
 
-    suspend fun exportBackup(uri: Uri, password: CharArray) = withContext(Dispatchers.IO) {
-        try {
-            val plain = repository.snapshot().encode()
-            val encrypted = try { BackupCipher.encrypt(plain, password) } finally { plain.fill(0) }
-            getApplication<Application>().contentResolver.openOutputStream(uri, "wt")!!.use { it.write(encrypted) }
-        } finally { password.fill('\u0000') }
-    }
-
-    suspend fun previewBackup(uri: Uri, password: CharArray): BackupSnapshot = withContext(Dispatchers.IO) {
-        try {
-            val encrypted = getApplication<Application>().contentResolver.openInputStream(uri)!!.use { input ->
-                val output = java.io.ByteArrayOutputStream()
-                val buffer = ByteArray(8192)
-                while (true) {
-                    val count = input.read(buffer)
-                    if (count == -1) break
-                    require(output.size() + count <= BackupCipher.MAX_BYTES) { "La copia supera 16 MB." }
-                    output.write(buffer, 0, count)
-                }
-                output.toByteArray()
-            }
-            val plain = BackupCipher.decrypt(encrypted, password)
-            try { BackupSnapshot.decode(plain) } finally { plain.fill(0) }
-        } finally { password.fill('\u0000') }
-    }
-
-    suspend fun restoreBackup(snapshot: BackupSnapshot) = withContext(Dispatchers.IO) {
-        dataGeneration.value += 1
-        repository.restore(snapshot)
+    internal fun invalidatePendingActions() {
+        dataGeneration.update { it + 1 }
     }
 }
