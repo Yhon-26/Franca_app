@@ -288,7 +288,7 @@ private fun MainApp(vm: FinanceViewModel, yape: YapePaymentsViewModel, window: W
                                         onRemoveFavorite = { item -> scope.launch { vm.removeFavorite(item) } },
                                         onDefaultAccountChanged = vm::updateDefaultAccount,
                                         onFavoriteAccountChanged = vm::updateFavoriteAccount,
-                                        backupViewModel = vm,
+                                        onBeforeRestore = vm::invalidatePendingActions,
                                         yapePayments = yape,
                                         onYapeSaved = ::feedbackForYape
                                     )

@@ -14,6 +14,8 @@ abstract class FinanceDatabase : RoomDatabase() {
     abstract fun yapeSuggestions(): YapeSuggestionDao
     abstract fun bcpMailSuggestions(): BcpMailDao
 
+    internal val repository by lazy { FinanceRepository(this) }
+
     /** Sin datos ficticios: solo la cuenta Efectivo con saldo 0 y categorías. */
     suspend fun initialize() = withTransaction {
         val dao = dao()
