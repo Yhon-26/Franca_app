@@ -282,7 +282,7 @@ class YapePilotTest {
         review.actionIntent.send()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Revisar ingreso de Yape").fetchSemanticsNodes().isNotEmpty() }
         assertSaveButtonUsesFrancaBlue("Guardar ingreso")
-        compose.onNodeWithText("Yape").assertIsSelected()
+        compose.onNode(hasText("Cuenta de destino") and hasText("Yape")).assertIsDisplayed()
         compose.onNodeWithText("Categoría").performScrollTo().performClick()
         compose.onNodeWithText("Transporte").assertDoesNotExist()
         compose.onNodeWithContentDescription("Buscar categoría").performTextInput("venta")
@@ -320,7 +320,9 @@ class YapePilotTest {
         compose.onNodeWithText("Guardar transferencia").assertIsNotEnabled()
         compose.onNodeWithText("Elige la otra cuenta").assertIsDisplayed()
         compose.onNodeWithText("Sin categoría").assertDoesNotExist()
-        compose.onAllNodesWithText("Efectivo").onLast().performScrollTo().performClick()
+        compose.onNodeWithText("Cuenta de origen").performScrollTo().performClick()
+        compose.onNodeWithText("Elegir cuenta de origen").assertIsDisplayed()
+        compose.onNodeWithText("Efectivo").performClick()
         compose.onNodeWithText("Guardar transferencia").performClick()
         val saved = runBlocking { withTimeout(10_000) { db.dao().transactions().first { it.isNotEmpty() } } }.single()
         assertEquals(EntryType.TRANSFER, saved.type)
@@ -354,7 +356,7 @@ class YapePilotTest {
         assertTrue(runBlocking { db.dao().allTransactions().isEmpty() })
         alert.notification.contentIntent.send()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("Revisar Yape enviado").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Yape").assertIsSelected()
+        compose.onNode(hasText("Cuenta de origen") and hasText("Yape")).assertIsDisplayed()
         compose.onNodeWithText("Guardar gasto").performClick()
         val saved = runBlocking { withTimeout(10_000) { db.dao().transactions().first { it.isNotEmpty() } } }.single()
         assertEquals(EntryType.EXPENSE, saved.type)

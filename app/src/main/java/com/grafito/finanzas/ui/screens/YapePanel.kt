@@ -12,7 +12,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -455,11 +454,14 @@ internal fun YapeForm(candidate: YapeSuggestion, accounts: List<AccountEntity>, 
     var categoryId by rememberSaveable(candidate.id) { mutableStateOf<Long?>(null) }
     var transfer by rememberSaveable(candidate.id) { mutableStateOf(false) }
     var otherAccountId by rememberSaveable(candidate.id) { mutableStateOf<Long?>(null) }
+    var accountPicker by rememberSaveable(candidate.id) { mutableStateOf<PaymentAccountField?>(null) }
     var showCategories by rememberSaveable(candidate.id) { mutableStateOf(false) }
     var confirmDiscard by rememberSaveable(candidate.id) { mutableStateOf(false) }
     val cents = Money.parse(amount)
     val account = accounts.find { it.id == accountId }
     val otherAccount = accounts.find { it.id == otherAccountId && it.id != accountId }
+    val mainField = if (candidate.outgoing) PaymentAccountField.ORIGIN else PaymentAccountField.DESTINATION
+    val otherField = if (candidate.outgoing) PaymentAccountField.DESTINATION else PaymentAccountField.ORIGIN
     val amountColor = if (candidate.outgoing) HomePalette.Ink else HomePalette.Income
     val entryLabel = if (candidate.outgoing) "Gasto" else "Ingreso"
     val entryType = if (candidate.outgoing) EntryType.EXPENSE else EntryType.INCOME
@@ -511,22 +513,17 @@ internal fun YapeForm(candidate: YapeSuggestion, accounts: List<AccountEntity>, 
                             label = { Text("Entre mis cuentas") })
                     }
                 }
-                Text(if (candidate.outgoing) "¿De qué cuenta salió el dinero?" else "¿En qué cuenta recibiste el dinero?",
-                    style = MaterialTheme.typography.labelLarge)
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    accounts.forEach { item ->
-                        FilterChip(selected = item.id == accountId, onClick = { accountId = item.id },
-                            enabled = !busy, label = { Text(item.name) })
-                    }
+                fun openAccountPicker(field: PaymentAccountField) {
+                    focus.clearFocus()
+                    keyboard?.hide()
+                    accountPicker = field
+                }
+                RegisterPaymentAccountField(mainField, account, !busy && accounts.isNotEmpty()) {
+                    openAccountPicker(mainField)
                 }
                 if (transfer) {
-                    Text(if (candidate.outgoing) "¿En cuál de tus cuentas entró?" else "¿De cuál de tus cuentas salió?",
-                        style = MaterialTheme.typography.labelLarge)
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        accounts.filter { it.id != accountId }.forEach { item ->
-                            FilterChip(selected = item.id == otherAccountId, onClick = { otherAccountId = item.id },
-                                enabled = !busy, label = { Text(item.name) })
-                        }
+                    RegisterPaymentAccountField(otherField, otherAccount, !busy && accounts.any { it.id != accountId }) {
+                        openAccountPicker(otherField)
                     }
                 } else {
                     RegisterCategoryField(selectedCategory, enabled = !busy) {
@@ -559,6 +556,19 @@ internal fun YapeForm(candidate: YapeSuggestion, accounts: List<AccountEntity>, 
                     Text("Descartar aviso")
                 }
             }
+        }
+    }
+    accountPicker?.let { field ->
+        val choosingMain = field == mainField
+        val excluded = if (choosingMain && transfer) otherAccount?.id else if (!choosingMain) account?.id else null
+        RegisterAccountSheet(
+            accounts.filter { it.id != excluded },
+            if (choosingMain) account?.id else otherAccount?.id,
+            onDismiss = { accountPicker = null },
+            title = field.pickerTitle
+        ) { id ->
+            if (choosingMain) accountId = id else otherAccountId = id
+            accountPicker = null
         }
     }
     if (showCategories && !transfer) {

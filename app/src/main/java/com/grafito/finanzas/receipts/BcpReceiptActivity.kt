@@ -11,10 +11,9 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -22,6 +21,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
@@ -41,7 +44,10 @@ import com.grafito.finanzas.ui.components.FrancaCue
 import com.grafito.finanzas.ui.components.LocalFrancaSounds
 import com.grafito.finanzas.ui.components.ProvideFrancaSounds
 import com.grafito.finanzas.ui.components.ScreenTitle
+import com.grafito.finanzas.ui.screens.PaymentAccountField
+import com.grafito.finanzas.ui.screens.RegisterAccountSheet
 import com.grafito.finanzas.ui.screens.RegisterCategoryField
+import com.grafito.finanzas.ui.screens.RegisterPaymentAccountField
 import com.grafito.finanzas.ui.screens.RegisterCategorySheet
 import com.grafito.finanzas.ui.theme.GrafitoTheme
 import com.grafito.finanzas.ui.theme.HomePalette
@@ -78,21 +84,29 @@ open class BcpReceiptActivity : ComponentActivity() {
                 GrafitoTheme(colorScheme = HomePalette.panelScheme) {
                     Scaffold(containerColor = HomePalette.Background, contentColor = HomePalette.Navy) { padding ->
                         Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).imePadding(), contentAlignment = Alignment.TopCenter) {
-                            Column(Modifier.widthIn(max = 620.dp).fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                ScreenTitle(if (gmailReview) "Pago BCP detectado" else "Constancia BCP")
-                                when (val review = state) {
-                                    ReceiptReview.Reading -> {
-                                        LinearProgressIndicator(Modifier.fillMaxWidth())
-                                        Text("Leyendo la constancia…")
-                                        OutlinedButton(onClick = ::finish) { Text("Cancelar") }
+                            val title = if (gmailReview) "Pago BCP detectado" else "Constancia BCP"
+                            when (val review = state) {
+                                is ReceiptReview.Ready -> ReceiptForm(
+                                    title, review, accounts, categories, ::finish, model::discard, model::save
+                                )
+                                else -> Column(
+                                    Modifier.widthIn(max = 620.dp).fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+                                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    ScreenTitle(title)
+                                    when (review) {
+                                        ReceiptReview.Reading -> {
+                                            LinearProgressIndicator(Modifier.fillMaxWidth())
+                                            Text("Leyendo la constancia…")
+                                            OutlinedButton(onClick = ::finish) { Text("Cancelar") }
+                                        }
+                                        ReceiptReview.Unreadable -> ReceiptMessage("No pudimos abrir la constancia. Vuelve a compartirla desde BCP.", ::finish)
+                                        ReceiptReview.Duplicate -> ReceiptMessage("Esta constancia ya está registrada en Franca.", ::finish)
+                                        ReceiptReview.Unavailable -> ReceiptMessage("Este aviso ya no está pendiente o no pudo abrirse.", ::finish)
+                                        ReceiptReview.Saved -> Text("Movimiento guardado.")
+                                        ReceiptReview.Dismissed -> Text("Aviso descartado.")
+                                        is ReceiptReview.Ready -> Unit
                                     }
-                                    ReceiptReview.Unreadable -> ReceiptMessage("No pudimos abrir la constancia. Vuelve a compartirla desde BCP.", ::finish)
-                                    ReceiptReview.Duplicate -> ReceiptMessage("Esta constancia ya está registrada en Franca.", ::finish)
-                                    ReceiptReview.Unavailable -> ReceiptMessage("Este aviso ya no está pendiente o no pudo abrirse.", ::finish)
-                                    ReceiptReview.Saved -> Text("Movimiento guardado.")
-                                    ReceiptReview.Dismissed -> Text("Aviso descartado.")
-                                    is ReceiptReview.Ready -> ReceiptForm(review, accounts, categories, ::finish, model::discard, model::save)
                                 }
                             }
                         }
@@ -208,7 +222,7 @@ private fun ReceiptMessage(message: String, onClose: () -> Unit) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ReceiptForm(review: ReceiptReview.Ready, accounts: List<AccountEntity>, categories: List<CategoryEntity>,
+private fun ReceiptForm(title: String, review: ReceiptReview.Ready, accounts: List<AccountEntity>, categories: List<CategoryEntity>,
                         onClose: () -> Unit, onDiscard: () -> Unit, onSave: (Long, Long, Long?, String, Long?) -> Unit) {
     var amount by rememberSaveable(review.receipt.fingerprint) {
         mutableStateOf(review.receipt.suggestedCents?.let { "${it / 100}.${(it % 100).toString().padStart(2, '0')}" }.orEmpty())
@@ -219,6 +233,8 @@ private fun ReceiptForm(review: ReceiptReview.Ready, accounts: List<AccountEntit
     var transfer by rememberSaveable { mutableStateOf(false) }
     var categoryId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showCategories by rememberSaveable(review.receipt.fingerprint) { mutableStateOf(false) }
+    var accountPicker by rememberSaveable { mutableStateOf<PaymentAccountField?>(null) }
+    var confirmDiscard by rememberSaveable { mutableStateOf(false) }
     var accountPrefilled by rememberSaveable { mutableStateOf(false) }
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -233,65 +249,132 @@ private fun ReceiptForm(review: ReceiptReview.Ready, accounts: List<AccountEntit
     val cents = Money.parse(amount)
     val from = accounts.find { it.id == fromId }
     val to = accounts.find { it.id == toId && it.id != fromId }
-    Text("Comprueba el monto y elige cómo registrarlo.", color = HomePalette.Muted, style = MaterialTheme.typography.bodySmall)
-    if (review.mail == null && review.receipt.operationFingerprint == null) {
-        Text("Para detectar duplicados de Gmail hacen falta la fecha y el número de operación BCP. Revisa el historial antes de guardar.",
-            style = MaterialTheme.typography.bodySmall)
+    val missing = when {
+        cents == null -> "Escribe un monto válido"
+        accounts.isEmpty() -> "Añade una cuenta en Ajustes"
+        from == null -> "Elige la cuenta de origen"
+        transfer && to == null -> "Elige la cuenta de destino"
+        else -> null
     }
-    OutlinedCard(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.outlinedCardColors(containerColor = HomePalette.Paper, contentColor = HomePalette.Navy),
-        border = BorderStroke(1.dp, HomePalette.Line)
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (review.receipt.suggestedCents == null) {
-                Text("Escribe el importe en soles.", style = MaterialTheme.typography.bodySmall, color = HomePalette.Muted)
+    fun finishEditing() {
+        focus.clearFocus()
+        keyboard?.hide()
+    }
+
+    Column(Modifier.widthIn(max = 620.dp).fillMaxSize()) {
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            ScreenTitle(title)
+            Text("Comprueba el monto y elige cómo registrarlo.", color = HomePalette.Muted, style = MaterialTheme.typography.bodySmall)
+            if (review.mail == null && review.receipt.operationFingerprint == null) {
+                Text("Para detectar duplicados de Gmail hacen falta la fecha y el número de operación BCP. Revisa el historial antes de guardar.",
+                    style = MaterialTheme.typography.bodySmall)
             }
-            OutlinedTextField(value = amount, onValueChange = { amount = it.take(12) }, modifier = Modifier.fillMaxWidth(),
-                label = { Text("Importe en soles") }, singleLine = true, enabled = !review.saving,
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth(),
                 shape = MaterialTheme.shapes.medium,
-                textStyle = MaterialTheme.typography.headlineMedium.copy(fontFeatureSettings = "tnum"),
-                prefix = { Text("S/ ", color = HomePalette.Muted) },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = !transfer, onClick = { transfer = false }, enabled = !review.saving, label = { Text("Gasto") })
-                FilterChip(selected = transfer, onClick = { transfer = true }, enabled = accounts.size >= 2 && !review.saving,
-                    label = { Text("Entre mis cuentas") })
-            }
-            ReceiptAccountMenu("Cuenta de origen", from, accounts, !review.saving) { fromId = it.id }
-            if (transfer) ReceiptAccountMenu("Cuenta de destino", to, accounts.filter { it.id != fromId }, !review.saving) { toId = it.id }
-            if (review.mail != null && !transfer) {
-                RegisterCategoryField(selectedCategory, enabled = !review.saving) {
-                    focus.clearFocus()
-                    keyboard?.hide()
-                    showCategories = true
+                colors = CardDefaults.outlinedCardColors(containerColor = HomePalette.Paper, contentColor = HomePalette.Navy),
+                border = BorderStroke(1.dp, HomePalette.Line)
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (review.receipt.suggestedCents == null) {
+                        Text("Escribe el importe en soles.", style = MaterialTheme.typography.bodySmall, color = HomePalette.Muted)
+                    }
+                    OutlinedTextField(value = amount, onValueChange = { amount = it.take(12) }, modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Importe en soles") }, singleLine = true, enabled = !review.saving,
+                        shape = MaterialTheme.shapes.medium,
+                        textStyle = MaterialTheme.typography.headlineMedium.copy(fontFeatureSettings = "tnum"),
+                        prefix = { Text("S/ ", color = HomePalette.Muted) },
+                        isError = amount.isNotBlank() && cents == null,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { finishEditing() }))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = !transfer, onClick = { transfer = false }, enabled = !review.saving, label = { Text("Gasto") })
+                        FilterChip(selected = transfer, onClick = { transfer = true }, enabled = accounts.size >= 2 && !review.saving,
+                            label = { Text("Entre mis cuentas") })
+                    }
+                    RegisterPaymentAccountField(PaymentAccountField.ORIGIN, from, !review.saving && accounts.isNotEmpty()) {
+                        finishEditing()
+                        accountPicker = PaymentAccountField.ORIGIN
+                    }
+                    if (transfer) {
+                        RegisterPaymentAccountField(PaymentAccountField.DESTINATION, to,
+                            !review.saving && accounts.any { it.id != fromId }) {
+                            finishEditing()
+                            accountPicker = PaymentAccountField.DESTINATION
+                        }
+                    }
+                    if (review.mail != null && !transfer) {
+                        RegisterCategoryField(selectedCategory, enabled = !review.saving) {
+                            finishEditing()
+                            showCategories = true
+                        }
+                    }
+                    OutlinedTextField(value = note, onValueChange = { note = it.take(160) }, modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Concepto (opcional)") }, singleLine = true, enabled = !review.saving,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { finishEditing() }))
                 }
             }
-            OutlinedTextField(value = note, onValueChange = { note = it.take(160) }, modifier = Modifier.fillMaxWidth(),
-                label = { Text("Concepto (opcional)") }, singleLine = true, enabled = !review.saving)
+        }
+        HorizontalDivider(color = HomePalette.Line)
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            (review.error ?: missing)?.let {
+                Text(it, Modifier.padding(bottom = 6.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+            Button(
+                onClick = {
+                    if (cents != null && from != null && (!transfer || to != null)) {
+                        finishEditing()
+                        onSave(cents, from.id, to?.id.takeIf { transfer }, note, selectedCategory?.id.takeUnless { transfer })
+                    }
+                },
+                enabled = !review.saving && missing == null,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                shape = MaterialTheme.shapes.medium
+            ) {
+                Text(if (review.saving) "Guardando…" else if (transfer) "Guardar transferencia" else "Guardar gasto")
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
+                TextButton(onClick = onClose, enabled = !review.saving) { Text("Cancelar") }
+                if (review.mail != null) {
+                    TextButton(
+                        onClick = { finishEditing(); confirmDiscard = true },
+                        enabled = !review.saving,
+                        colors = ButtonDefaults.textButtonColors(contentColor = HomePalette.Expense)
+                    ) { Text("Descartar aviso") }
+                }
+            }
         }
     }
-    review.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-    Button(onClick = {
-        if (cents != null && from != null) onSave(cents, from.id, if (transfer) to?.id else null, note,
-            if (transfer) null else selectedCategory?.id)
-    }, enabled = !review.saving && cents != null && from != null && (!transfer || to != null),
-        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = MaterialTheme.shapes.medium) {
-        Text(if (review.saving) "Guardando…" else if (transfer) "Guardar transferencia" else "Guardar gasto")
-    }
-    FlowRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
-    ) {
-        TextButton(onClick = onClose, enabled = !review.saving) { Text("Cancelar") }
-        if (review.mail != null) {
-            TextButton(
-                onClick = onDiscard,
-                enabled = !review.saving,
-                colors = ButtonDefaults.textButtonColors(contentColor = HomePalette.Expense)
-            ) { Text("Descartar aviso") }
+
+    accountPicker?.let { field ->
+        val origin = field == PaymentAccountField.ORIGIN
+        val excluded = if (origin && transfer) to?.id else if (!origin) from?.id else null
+        RegisterAccountSheet(accounts.filter { it.id != excluded }, if (origin) from?.id else to?.id,
+            onDismiss = { accountPicker = null }, title = field.pickerTitle) { id ->
+            if (origin) fromId = id else toId = id
+            accountPicker = null
         }
+    }
+    if (confirmDiscard && review.mail != null) {
+        AlertDialog(
+            onDismissRequest = { confirmDiscard = false },
+            title = { Text("¿Descartar aviso?") },
+            text = { Text("Se quitará de los avisos pendientes sin guardar un movimiento.") },
+            confirmButton = {
+                TextButton(onClick = { confirmDiscard = false; onDiscard() }, enabled = !review.saving) {
+                    Text("Descartar")
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text("Cancelar") } }
+        )
     }
     if (showCategories && review.mail != null && !transfer) {
         RegisterCategorySheet(
@@ -299,23 +382,5 @@ private fun ReceiptForm(review: ReceiptReview.Ready, accounts: List<AccountEntit
             onSelect = { categoryId = it; showCategories = false },
             onDismiss = { showCategories = false }
         )
-    }
-}
-
-@Composable
-private fun ReceiptAccountMenu(label: String, selected: AccountEntity?, choices: List<AccountEntity>, enabled: Boolean,
-                               onSelect: (AccountEntity) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    Text(label, style = MaterialTheme.typography.labelLarge)
-    Box(Modifier.fillMaxWidth()) {
-        OutlinedButton(onClick = { open = true }, enabled = enabled && choices.isNotEmpty(), modifier = Modifier.fillMaxWidth()) {
-            Text(selected?.name ?: "Elegir cuenta", Modifier.weight(1f))
-            Icon(Icons.Outlined.ExpandMore, contentDescription = null)
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = HomePalette.Paper) {
-            choices.forEach { account ->
-                DropdownMenuItem(text = { Text(account.name) }, onClick = { onSelect(account); open = false })
-            }
-        }
     }
 }

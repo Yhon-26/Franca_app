@@ -14,6 +14,8 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.core.content.FileProvider
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
@@ -59,7 +61,11 @@ class BcpReceiptTest {
         ActivityScenario.launch<BcpMailReviewActivity>(BcpMailAlerts.reviewIntent(app, payment.id)).use {
             waitForText("Pago BCP detectado")
             waitForText("BCP")
-            val save = compose.onNodeWithText("Guardar gasto").performScrollTo().assertIsEnabled()
+            compose.onNodeWithText("Descartar aviso").performClick()
+            compose.onNodeWithText("¿Descartar aviso?").assertIsDisplayed()
+            compose.onAllNodesWithText("Cancelar").onLast().performClick()
+            assertNotNull(runBlocking { inbox.findPending(payment.id) })
+            val save = compose.onNodeWithText("Guardar gasto").assertIsDisplayed().assertIsEnabled()
             val pixels = save.captureToImage().toPixelMap()
             assertEquals(HomePalette.Blue, pixels[pixels.width / 8, pixels.height / 2])
             val screenshot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
@@ -75,7 +81,7 @@ class BcpReceiptTest {
             compose.onNodeWithContentDescription("Buscar categoría").performTextInput("alimentacion")
             compose.onNodeWithText("Alimentación").performClick()
             compose.onNode(hasText("Categoría") and hasText("Alimentación")).assertIsDisplayed()
-            compose.onNodeWithText("Guardar gasto").performScrollTo().performClick()
+            compose.onNodeWithText("Guardar gasto").performClick()
             val saved = awaitSaved()
             assertEquals(1250L, saved.amountCents)
             assertEquals(2L, saved.accountId)
@@ -126,7 +132,7 @@ class BcpReceiptTest {
                 compose.onNode(hasSetTextAction() and hasText("12.50")).assertExists()
                 assertTrue(runBlocking { db.dao().allTransactions().isEmpty() })
                 waitForText("BCP")
-                compose.onNodeWithText("Guardar gasto").performScrollTo().performClick()
+                compose.onNodeWithText("Guardar gasto").performClick()
                 val saved = awaitSaved()
                 assertEquals(1250L, saved.amountCents)
                 assertEquals(2L, saved.accountId)
@@ -145,15 +151,48 @@ class BcpReceiptTest {
     @Test fun sharedTextCanBeReviewedAsTransferBetweenOwnAccounts() {
         val intent = Intent(Intent.ACTION_SEND).setClass(app, BcpReceiptActivity::class.java)
             .setType("text/plain").putExtra(Intent.EXTRA_TEXT, "Constancia BCP\nMonto transferido S/ 30.00")
-        ActivityScenario.launch<BcpReceiptActivity>(intent).use {
+        ActivityScenario.launch<BcpReceiptActivity>(intent).use { scenario ->
             waitForText("BCP")
-            compose.onNodeWithText("Entre mis cuentas").performClick()
-            compose.onNodeWithText("Elegir cuenta").performScrollTo().performClick()
+            compose.onNodeWithText("Entre mis cuentas").performScrollTo().performClick()
+            val save = compose.onNodeWithText("Guardar transferencia")
+            save.assertIsDisplayed().assertIsNotEnabled()
+            compose.onNodeWithText("Elige la cuenta de destino").assertIsDisplayed()
+            compose.onNodeWithText("Cuenta de destino").performScrollTo().performClick()
+            compose.onNodeWithText("Elegir cuenta de destino").assertIsDisplayed()
             compose.onNodeWithText("Efectivo").performClick()
-            compose.onNodeWithText("Guardar transferencia").performScrollTo().performClick()
+            val note = compose.onNodeWithText("Concepto (opcional)")
+            note.performScrollTo().performClick()
+            compose.waitUntil(10_000) {
+                var keyboardVisible = false
+                scenario.onActivity {
+                    keyboardVisible = ViewCompat.getRootWindowInsets(it.window.decorView)
+                        ?.isVisible(WindowInsetsCompat.Type.ime()) == true
+                }
+                keyboardVisible
+            }
+            note.performTextInput("Compra familiar")
+            save.assertIsDisplayed().assertIsEnabled()
+            val bounds = save.fetchSemanticsNode().boundsInWindow
+            var keyboardTop = 0
+            scenario.onActivity {
+                val decor = it.window.decorView
+                keyboardTop = decor.height - ViewCompat.getRootWindowInsets(decor)!!
+                    .getInsets(WindowInsetsCompat.Type.ime()).bottom
+            }
+            assertTrue("Guardar debe quedar por encima del teclado", bounds.bottom <= keyboardTop)
+            val screenshot = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+            try {
+                File(app.getExternalFilesDir(null), "franca-bcp-teclado.png").outputStream().use {
+                    screenshot.compress(Bitmap.CompressFormat.PNG, 100, it)
+                }
+            } finally {
+                screenshot.recycle()
+            }
+            compose.onNodeWithText("Guardar transferencia").performClick()
             val saved = awaitSaved()
             assertEquals(EntryType.TRANSFER, saved.type)
             assertEquals(3000L, saved.amountCents)
+            assertEquals("Compra familiar", saved.note)
             assertEquals(2L, saved.accountId)
             assertEquals(1L, saved.toAccountId)
         }
@@ -197,7 +236,7 @@ class BcpReceiptTest {
         assertTrue(runBlocking { inbox.record(payment) })
         ActivityScenario.launch<BcpReceiptActivity>(sharedText(operation)).use {
             waitForText("BCP")
-            compose.onNodeWithText("Guardar gasto").performScrollTo().performClick()
+            compose.onNodeWithText("Guardar gasto").performClick()
             assertEquals(payment.id, awaitSaved().bcpOperationFingerprint)
         }
         runBlocking {
