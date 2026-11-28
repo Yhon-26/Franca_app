@@ -15,7 +15,7 @@ concurrency:
 jobs:
   validation:
     name: Compilación, pruebas unitarias y Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -26,6 +26,9 @@ jobs:
           distribution: jetbrains
           java-version: '21'
       - name: Instalar plataforma Android
-        run: sdkmanager 'platforms;android-37'
+        run: |
+          if [[ ! -f "$ANDROID_HOME/platforms/android-37.0/android.jar" ]]; then
+            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-37.0'
+          fi
       - name: Validar Franca
         run: bash ./gradlew --no-daemon --console=plain :app:testValidationUnitTest :app:lintValidation :app:assembleDebug
